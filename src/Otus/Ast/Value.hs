@@ -1,14 +1,20 @@
 module Otus.Ast.Value (
-  InnerVal(..), InnerTyVal
+  Env(..), EnvSeg(..), Closure(..),
+  InnerVal(..), InnerTyVal, InnerNeutral(..), InnerClosure,
+  OuterVal(..), OuterTyVal, OuterNeutral(..), OuterClosure, VTelescope(..), TeleClosure
 ) where
 
 
 import           Data.List.NonEmpty
 import           Otus.Ast.Id
+import           Otus.Ast.Term
+import           Otus.Ast.Univ
+
+-- Environment
 
 data EnvSeg
   = InnerEl InnerVal
-  | OuterEl
+  | OuterEl OuterVal
   deriving (Show, Eq)
 
 newtype Env = Env [EnvSeg]
@@ -19,7 +25,7 @@ data Closure val = Closure {
     closureBody :: val
   } deriving (Show, Eq)
 
-type InnerClosure = Closure InnerVal
+type InnerClosure = Closure InnerTerm
 data InnerNeutral
   = INVar LevelId
   | INApp InnerVal (NonEmpty InnerVal)
@@ -28,11 +34,36 @@ data InnerNeutral
 
 type InnerTyVal = InnerVal
 data InnerVal
-  = InnerNeutral InnerNeutral
-  | InnerVPi InnerVal InnerClosure
-  | InnerVLam InnerClosure
-  | InnerVNat
-  | InnerVZero
-  | InnerVSuc InnerVal
-  | InnerVType Int
+  = INeutral InnerNeutral
+  | IVPi InnerTyVal InnerClosure
+  | IVLam InnerClosure
+  | IVNat
+  | IVZero
+  | IVSuc InnerVal
+  | IVType Universe
+  deriving (Show, Eq)
+
+-- Outer Value
+
+type OuterClosure = Closure OuterVal
+type TeleClosure = Closure Telescope
+
+data VTelescope
+  = TVNil
+  | TVCons InnerTyVal TeleClosure
+  deriving (Show, Eq)
+
+data OuterNeutral
+  = ONVar LevelId
+  | ONApp OuterVal (NonEmpty InnerVal)
+  deriving (Show, Eq)
+
+type OuterTyVal = OuterVal
+data OuterVal
+  = ONeutral OuterNeutral
+  | OVPi OuterTyVal OuterClosure
+  | OVLam OuterClosure
+  | OVQuote Int InnerVal
+  | OVLift [InnerTyVal] InnerVal
+  | OVType Stage Universe
   deriving (Show, Eq)
