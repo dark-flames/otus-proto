@@ -1,10 +1,11 @@
-module Otus.Ast.Id (
-  IndexId(..),
-  LevelId(..),
-  Contextual(..),
-  CtxLike(..),
-  CtxIndex(..)
-) where
+module Otus.Ast.Id
+  ( IndexId (..),
+    LevelId (..),
+    Contextual (..),
+    CtxLike (..),
+    CtxIndex (..),
+  )
+where
 
 newtype IndexId = IndexId Int
   deriving (Show, Eq)
@@ -15,14 +16,14 @@ newtype LevelId = LevelId Int
 class Contextual a where
   ctxLength :: a -> Int
 
-class Contextual a => CtxLike a e where
+class (Contextual a) => CtxLike a e where
   (!?) :: a -> Int -> Maybe e
   push :: a -> e -> a
 
 class CtxIndex id where
-  find :: CtxLike a e => a -> id -> Maybe e
-  intoLevel :: Contextual a => a -> id -> LevelId
-  intoIndex :: Contextual a => a -> id -> IndexId
+  find :: (CtxLike a e) => a -> id -> Maybe e
+  intoLevel :: (Contextual a) => a -> id -> LevelId
+  intoIndex :: (Contextual a) => a -> id -> IndexId
 
 instance CtxIndex IndexId where
   find ctx index = find ctx (intoLevel ctx index)

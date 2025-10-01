@@ -1,0 +1,15 @@
+name: hlint
+
+on: [push, pull_request]
+
+jobs:
+  hlint:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: haskell-actions/hlint-scan@v1.3
+        with:
+          path: src
+          fail-on: warning

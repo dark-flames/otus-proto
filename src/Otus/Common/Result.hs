@@ -1,8 +1,9 @@
-module Otus.Common.Result(
-  Result(..)
-) where
+module Otus.Common.Result
+  ( Result (..),
+  )
+where
 
-import           Control.Monad.Error.Class
+import Control.Monad.Error.Class
 
 data Result e a
   = Success a
@@ -15,8 +16,8 @@ instance Functor (Result e) where
 
 instance Applicative (Result e) where
   pure = Success
-  (Failure e) <*> _           = Failure e
-  _ <*> (Failure e)           = Failure e
+  (Failure e) <*> _ = Failure e
+  _ <*> (Failure e) = Failure e
   (Success f) <*> (Success a) = Success (f a)
 
 instance Monad (Result e) where
@@ -27,4 +28,4 @@ instance Monad (Result e) where
 instance MonadError e (Result e) where
   throwError = Failure
   catchError (Failure e) handler = handler e
-  catchError (Success a) _       = Success a
+  catchError (Success a) _ = Success a

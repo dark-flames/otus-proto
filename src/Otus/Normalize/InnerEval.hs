@@ -1,11 +1,12 @@
-module Otus.Normalize.Inner.Eval(
-  evalInner
-) where
+module Otus.Normalize.InnerEval
+  ( evalInner,
+  )
+where
 
-import          Data.List.NonEmpty (singleton, (<|))
-import           Otus.Ast
-import           Otus.Normalize.Err
-import           Control.Monad.Error.Class
+import Control.Monad.Error.Class
+import Data.List.NonEmpty (singleton, (<|))
+import Otus.Ast
+import Otus.Normalize.Err
 
 evalInnerCls :: InnerClosure -> InnerVal -> NormalizeResult InnerVal
 evalInnerCls (Closure env body) argVal = evalInner (pushInner env argVal) body
@@ -35,8 +36,8 @@ evalINatElim base step scrutinee = case scrutinee of
 evalInner :: Env -> InnerTerm -> NormalizeResult InnerVal
 evalInner env tm = case tm of
   IVar idx -> case find env idx of
-    Just (InnerEl v)  -> return v
-    Just (OuterEl _)  -> throwError $ OuterVarInInner idx
+    Just (InnerEl v) -> return v
+    Just (OuterEl _) -> throwError $ OuterVarInInner idx
     Nothing -> throwError $ UnboundIndex Inner idx
   IPi domain codomain -> do
     domainVal <- evalInner env domain
@@ -56,5 +57,3 @@ evalInner env tm = case tm of
     scrutineeVal <- evalInner env scrutinee
     evalINatElim baseCls stepCls scrutineeVal
   IType u -> return $ IVType u
-
-

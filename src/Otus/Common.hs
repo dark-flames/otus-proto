@@ -1,5 +1,6 @@
-module Otus.Common (
-  module Otus.Common.Result
-) where
+module Otus.Common
+  ( module Otus.Common.Result,
+  )
+where
 
-import           Otus.Common.Result
+import Otus.Common.Result

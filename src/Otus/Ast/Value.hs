@@ -1,14 +1,28 @@
-module Otus.Ast.Value (
-  Env(..), EnvSeg(..), Closure(..),
-  pushInner, pushOuter, pushInner', pushOuter',
-  InnerVal(..), InnerTyVal, InnerNeutral(..), InnerClosure,
-  OuterVal(..), OuterTyVal, OuterNeutral(..), OuterClosure, VTelescope(..), TeleClosure
-) where
+module Otus.Ast.Value
+  ( Env (..),
+    EnvSeg (..),
+    Closure (..),
+    pushInner,
+    pushOuter,
+    pushInner',
+    pushOuter',
+    InnerVal (..),
+    InnerTyVal,
+    InnerNeutral (..),
+    InnerClosure,
+    OuterVal (..),
+    OuterTyVal,
+    OuterNeutral (..),
+    OuterClosure,
+    VTelescope (..),
+    TeleClosure,
+  )
+where
 
-import           Data.List.NonEmpty (NonEmpty)
-import           Otus.Ast.Id
-import           Otus.Ast.Term
-import           Otus.Ast.Univ
+import Data.List.NonEmpty (NonEmpty)
+import Otus.Ast.Id
+import Otus.Ast.Term
+import Otus.Ast.Univ
 
 -- Environment
 data EnvSeg
@@ -19,10 +33,11 @@ data EnvSeg
 newtype Env = Env [EnvSeg]
   deriving (Show, Eq)
 
-data Closure val = Closure {
-    closureEnv  :: Env,
+data Closure val = Closure
+  { closureEnv :: Env,
     closureBody :: val
-  } deriving (Show, Eq)
+  }
+  deriving (Show, Eq)
 
 instance Contextual Env where
   ctxLength (Env segs) = length segs
@@ -39,7 +54,7 @@ pushInner env = push env . InnerEl
 pushInner' :: Env -> [InnerVal] -> Env
 pushInner' env vs = foldl pushInner env (reverse vs)
 
-pushOuter :: Env -> OuterVal -> Env 
+pushOuter :: Env -> OuterVal -> Env
 pushOuter env = push env . OuterEl
 
 pushOuter' :: Env -> [OuterVal] -> Env
@@ -47,6 +62,7 @@ pushOuter' env vs = foldl pushOuter env (reverse vs)
 
 -- Inner Value
 type InnerClosure = Closure InnerTerm
+
 data InnerNeutral
   = INVar LevelId
   | INApp InnerNeutral (NonEmpty InnerVal)
@@ -54,6 +70,7 @@ data InnerNeutral
   deriving (Show, Eq)
 
 type InnerTyVal = InnerVal
+
 data InnerVal
   = INeutral InnerNeutral
   | IVPi InnerTyVal InnerClosure
@@ -66,6 +83,7 @@ data InnerVal
 
 -- Outer Value
 type OuterClosure = Closure OuterVal
+
 type TeleClosure = Closure Telescope
 
 data VTelescope
@@ -79,6 +97,7 @@ data OuterNeutral
   deriving (Show, Eq)
 
 type OuterTyVal = OuterVal
+
 data OuterVal
   = ONeutral OuterNeutral
   | OVPi OuterTyVal OuterClosure

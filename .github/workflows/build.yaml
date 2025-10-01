@@ -1,0 +1,21 @@
+name: stack build and test
+
+on: [push, pull_request]
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: haskell-actions/setup@v2
+        with:
+          enable-stack: true
+          stack-no-global: true
+      - uses: actions/cache@v4
+        with:
+          path: ~/.stack
+          key: stack-${{ hashFiles('stack.yaml', 'otus-proto.cabal') }}
+      - name: build
+        run: stack build
+      - name: test
+        run: stack test

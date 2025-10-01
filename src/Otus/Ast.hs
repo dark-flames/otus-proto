@@ -1,11 +1,12 @@
-module Otus.Ast (
-  module Otus.Ast.Id,
-  module Otus.Ast.Univ,
-  module Otus.Ast.Term,
-  module Otus.Ast.Value
-) where
+module Otus.Ast
+  ( module Otus.Ast.Id,
+    module Otus.Ast.Univ,
+    module Otus.Ast.Term,
+    module Otus.Ast.Value,
+  )
+where
 
-import           Otus.Ast.Id
-import           Otus.Ast.Univ
-import           Otus.Ast.Term
-import           Otus.Ast.Value
+import Otus.Ast.Id
+import Otus.Ast.Term
+import Otus.Ast.Univ
+import Otus.Ast.Value

@@ -1,9 +1,11 @@
-module Otus.Normalize.Err(
-  NormalizeErr(..),
-  NormalizeResult
-) where
-import           Otus.Ast
-import           Otus.Common
+module Otus.Normalize.Err
+  ( NormalizeErr (..),
+    NormalizeResult,
+  )
+where
+
+import Otus.Ast
+import Otus.Common
 
 data NormalizeErr
   = Anyhow String
