@@ -1,6 +1,10 @@
 module Otus (
-  module Otus.Ast
+  module Otus.Common,
+  module Otus.Ast,
+  module Otus.Normalize
 ) where
 
-import          Otus.Ast
+import           Otus.Ast
+import           Otus.Common
+import           Otus.Normalize
 

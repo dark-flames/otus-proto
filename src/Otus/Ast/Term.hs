@@ -15,7 +15,7 @@ data InnerTerm
     | INat
     | IZero
     | ISuc InnerTerm
-    | INatElim InnerTerm InnerTerm InnerTerm InnerTerm
+    | INatElim InnerTerm InnerTerm InnerTerm
     | IType Universe
     deriving (Show, Eq)
 

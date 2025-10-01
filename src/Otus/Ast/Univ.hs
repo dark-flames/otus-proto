@@ -3,7 +3,6 @@ module Otus.Ast.Univ (
   Stage(..)
 ) where
 
-
 data Universe
   = UZero
   | USucc Universe

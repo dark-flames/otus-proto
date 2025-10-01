@@ -22,6 +22,11 @@ library
       Otus.Ast.Term
       Otus.Ast.Univ
       Otus.Ast.Value
+      Otus.Common
+      Otus.Common.Result
+      Otus.Normalize
+      Otus.Normalize.Err
+      Otus.Normalize.InnerEval
   other-modules:
       Paths_otus_proto
   hs-source-dirs:
@@ -39,4 +44,5 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       base >=4.20.1.0 && <4.20.2.0
+    , mtl >=2.3.1 && <3
   default-language: Haskell2010

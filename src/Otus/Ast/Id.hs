@@ -1,6 +1,7 @@
 module Otus.Ast.Id (
   IndexId(..),
   LevelId(..),
+  Contextual(..),
   CtxLike(..),
   CtxIndex(..)
 ) where
@@ -16,6 +17,7 @@ class Contextual a where
 
 class Contextual a => CtxLike a e where
   (!?) :: a -> Int -> Maybe e
+  push :: a -> e -> a
 
 class CtxIndex id where
   find :: CtxLike a e => a -> id -> Maybe e

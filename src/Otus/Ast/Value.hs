@@ -1,17 +1,16 @@
 module Otus.Ast.Value (
   Env(..), EnvSeg(..), Closure(..),
+  pushInner, pushOuter, pushInner', pushOuter',
   InnerVal(..), InnerTyVal, InnerNeutral(..), InnerClosure,
   OuterVal(..), OuterTyVal, OuterNeutral(..), OuterClosure, VTelescope(..), TeleClosure
 ) where
 
-
-import           Data.List.NonEmpty
+import           Data.List.NonEmpty (NonEmpty)
 import           Otus.Ast.Id
 import           Otus.Ast.Term
 import           Otus.Ast.Univ
 
 -- Environment
-
 data EnvSeg
   = InnerEl InnerVal
   | OuterEl OuterVal
@@ -25,11 +24,33 @@ data Closure val = Closure {
     closureBody :: val
   } deriving (Show, Eq)
 
+instance Contextual Env where
+  ctxLength (Env segs) = length segs
+
+instance CtxLike Env EnvSeg where
+  (Env segs) !? i
+    | i < 0 || i >= length segs = Nothing
+    | otherwise = Just $ segs !! i
+  push (Env segs) seg = Env $ seg : segs
+
+pushInner :: Env -> InnerVal -> Env
+pushInner env = push env . InnerEl
+
+pushInner' :: Env -> [InnerVal] -> Env
+pushInner' env vs = foldl pushInner env (reverse vs)
+
+pushOuter :: Env -> OuterVal -> Env 
+pushOuter env = push env . OuterEl
+
+pushOuter' :: Env -> [OuterVal] -> Env
+pushOuter' env vs = foldl pushOuter env (reverse vs)
+
+-- Inner Value
 type InnerClosure = Closure InnerTerm
 data InnerNeutral
   = INVar LevelId
-  | INApp InnerVal (NonEmpty InnerVal)
-  | INNatElim InnerVal InnerVal InnerVal InnerNeutral
+  | INApp InnerNeutral (NonEmpty InnerVal)
+  | INNatElim InnerNeutral InnerClosure InnerClosure
   deriving (Show, Eq)
 
 type InnerTyVal = InnerVal
@@ -44,7 +65,6 @@ data InnerVal
   deriving (Show, Eq)
 
 -- Outer Value
-
 type OuterClosure = Closure OuterVal
 type TeleClosure = Closure Telescope
 
