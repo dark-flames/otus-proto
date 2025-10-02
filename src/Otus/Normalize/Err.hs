@@ -13,6 +13,8 @@ data NormalizeErr
   | OuterVarInInner IndexId
   | InnerAppOnNoneLambda InnerVal
   | InnerNatElimOnNonNat InnerVal
+  | InnerVarInOuter IndexId
+  | OuterAppOnNoneLambda OuterVal
   deriving (Show, Eq)
 
 type NormalizeResult = Result NormalizeErr

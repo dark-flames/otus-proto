@@ -26,7 +26,10 @@ library
       Otus.Common.Result
       Otus.Normalize
       Otus.Normalize.Err
-      Otus.Normalize.InnerEval
+      Otus.Normalize.Inner
+      Otus.Normalize.Inner.Eval
+      Otus.Normalize.Outer
+      Otus.Normalize.Outer.Eval
   other-modules:
       Paths_otus_proto
   hs-source-dirs:

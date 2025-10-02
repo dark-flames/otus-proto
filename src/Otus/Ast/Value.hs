@@ -82,7 +82,7 @@ data InnerVal
   deriving (Show, Eq)
 
 -- Outer Value
-type OuterClosure = Closure OuterVal
+type OuterClosure = Closure OuterTerm
 
 type TeleClosure = Closure Telescope
 
@@ -93,7 +93,7 @@ data VTelescope
 
 data OuterNeutral
   = ONVar LevelId
-  | ONApp OuterVal (NonEmpty InnerVal)
+  | ONApp OuterNeutral (NonEmpty OuterVal)
   deriving (Show, Eq)
 
 type OuterTyVal = OuterVal

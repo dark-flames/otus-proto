@@ -1,5 +1,9 @@
-module Otus.Normalize.InnerEval
-  ( evalInner,
+module Otus.Normalize.Inner.Eval
+  ( evalICls,
+    evalICls',
+    evalIApp,
+    evalINatElim,
+    evalInner,
   )
 where
 
@@ -8,16 +12,16 @@ import Data.List.NonEmpty (singleton, (<|))
 import Otus.Ast
 import Otus.Normalize.Err
 
-evalInnerCls :: InnerClosure -> InnerVal -> NormalizeResult InnerVal
-evalInnerCls (Closure env body) argVal = evalInner (pushInner env argVal) body
+evalICls :: InnerClosure -> InnerVal -> NormalizeResult InnerVal
+evalICls (Closure env body) argVal = evalInner (pushInner env argVal) body
 
-evalInnerCls' :: InnerClosure -> [InnerVal] -> NormalizeResult InnerVal
-evalInnerCls' (Closure env body) argVals = evalInner (pushInner' env argVals) body
+evalICls' :: InnerClosure -> [InnerVal] -> NormalizeResult InnerVal
+evalICls' (Closure env body) argVals = evalInner (pushInner' env argVals) body
 
 -- Elimination
 evalIApp :: InnerVal -> InnerVal -> NormalizeResult InnerVal
 evalIApp fnVal argVal = case fnVal of
-  IVLam cls -> evalInnerCls cls argVal
+  IVLam cls -> evalICls cls argVal
   INeutral neu -> return $ INeutral $ case neu of
     INApp headNeu args -> INApp headNeu (argVal <| args)
     _ -> INApp neu (singleton argVal)
@@ -25,10 +29,10 @@ evalIApp fnVal argVal = case fnVal of
 
 evalINatElim :: InnerClosure -> InnerClosure -> InnerVal -> NormalizeResult InnerVal
 evalINatElim base step scrutinee = case scrutinee of
-  IVZero -> evalInnerCls base IVZero
+  IVZero -> evalICls base IVZero
   IVSuc n -> do
     recRes <- evalINatElim base step n
-    evalInnerCls' step [n, recRes]
+    evalICls' step [n, recRes]
   INeutral neu -> return $ INeutral $ INNatElim neu base step
   _ -> throwError $ InnerNatElimOnNonNat scrutinee
 
