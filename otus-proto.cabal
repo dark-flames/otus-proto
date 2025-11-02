@@ -17,6 +17,10 @@ extra-source-files:
 library
   exposed-modules:
       Otus
+      Otus.Ast
+      Otus.Ast.Id
+      Otus.Ast.Term
+      Otus.Ast.Univ
   other-modules:
       Paths_otus_proto
   hs-source-dirs:
