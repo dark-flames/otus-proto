@@ -1,6 +1,6 @@
-module Otus.Ast.Term
-  ( Term (..),
-  )
+module Otus.Ast.Term (
+  Term (..),
+)
 where
 
 import Otus.Ast.Id
@@ -9,17 +9,17 @@ import Otus.Ast.Univ
 data Telescope
   = TNil
   | TCons Term Telescope
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data PartialSubstitution
   = PSNil
   | PSCons (Maybe Term) PartialSubstitution
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Substitution
   = SNil
   | SCons Term Substitution
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Term
   = Var IndexId
@@ -42,14 +42,14 @@ data Term
   | Local Telescope Term
   | Partial PartialSubstitution Term
   | Error
-  | Bind Term
+  | Bind Term Term
   | Unify Term Term
   | -- Object
     Dynamic Telescope Term
   | Ok Substitution Term
   | TyErr
-  | DBind Term
+  | DBind Term Term
   | Force Term
   | -- Universe
     Type Stage Universe
-  deriving (Show, Eq)
+  deriving (Eq, Show)

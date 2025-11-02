@@ -1,4 +1,4 @@
-name: ormolu
+name: formolu
 
 on: [push, pull_request]
 
@@ -7,6 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: haskell-actions/run-ormolu@v14
+      - uses: haskell-actions/run-fourmolu@v11
         with:
-          mode: check
+          version: "latest"

@@ -1,15 +1,15 @@
-module Otus.Ast.Univ
-  ( Universe (..),
-    Stage (..),
-  )
+module Otus.Ast.Univ (
+  Universe (..),
+  Stage (..),
+)
 where
 
 data Universe
   = UZero
   | USucc Universe
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 data Stage
   = Meta
   | Object
-  deriving (Show, Eq)
+  deriving (Eq, Show)

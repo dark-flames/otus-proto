@@ -1,16 +1,16 @@
-module Otus.Ast.Id
-  ( IndexId (..),
-    LevelId (..),
-    CtxLike (..),
-    CtxIndex (..),
-  )
+module Otus.Ast.Id (
+  IndexId (..),
+  LevelId (..),
+  CtxLike (..),
+  CtxIndex (..),
+)
 where
 
 newtype IndexId = IndexId Int
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 newtype LevelId = LevelId Int
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 class Contextual a where
   ctxLength :: a -> Int
