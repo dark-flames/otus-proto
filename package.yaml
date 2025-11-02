@@ -11,6 +11,7 @@ description:         prototype of Otus project
 
 dependencies:
 - base >= 4.20.1.0 && < 4.20.2.0
+- mtl >= 2.3.1 && < 3
 
 ghc-options:
 - -Wall

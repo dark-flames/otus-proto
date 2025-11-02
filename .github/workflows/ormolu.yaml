@@ -1,0 +1,12 @@
+name: ormolu
+
+on: [push, pull_request]
+
+jobs:
+  ormolu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: haskell-actions/run-ormolu@v14
+        with:
+          mode: check
