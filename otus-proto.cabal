@@ -21,6 +21,11 @@ library
       Otus.Ast.Id
       Otus.Ast.Term
       Otus.Ast.Univ
+      Otus.Common
+      Otus.Common.Result
+      Otus.Normalize
+      Otus.Normalize.Err
+      Otus.Normalize.Eval
   other-modules:
       Paths_otus_proto
   hs-source-dirs:
