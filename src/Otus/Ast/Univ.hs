@@ -1,8 +1,7 @@
 module Otus.Ast.Univ (
   Universe (..),
   Stage (..),
-)
-where
+) where
 
 data Universe
   = UZero

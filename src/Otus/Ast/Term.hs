@@ -1,7 +1,6 @@
 module Otus.Ast.Term (
   Term (..),
-)
-where
+) where
 
 import Otus.Ast.Id
 import Otus.Ast.Univ
@@ -31,11 +30,20 @@ data Term
     Nat
   | Zero
   | Succ Term
-  | NatElim Term Term Term Term
+  | ---- NatElim : {P : Nat → Set}
+    ---- → P 0
+    ---- → ((n : Nat) → (P n) → P (1 + n))
+    ---- → (m : Nat) → P m
+    NatElim Term Term Term
   | -- Identity type
     Id Term Term Term
   | Refl
-  | J Term Term Term
+  | ---- J : {A : Set} {x : A}
+    ---- → (P : (y : A) → x ≡ y → Set)
+    ---- → P x refl
+    ---- → {y : A} (p : x ≡ y)
+    ---- → P y p
+    J Term Term Term
   | -- Meta
     Lift Term
   | Quote Term

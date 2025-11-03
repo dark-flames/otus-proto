@@ -1,6 +1,5 @@
 module Otus.Common (
   module Otus.Common.Result,
-)
-where
+) where
 
 import Otus.Common.Result

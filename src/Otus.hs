@@ -2,8 +2,7 @@ module Otus (
   module Otus.Ast,
   module Otus.Common,
   module Otus.Normalize,
-)
-where
+) where
 
 import Otus.Ast
 import Otus.Common

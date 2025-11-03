@@ -1,7 +1,6 @@
 module Otus.Common.Result (
   Result (..),
-)
-where
+) where
 
 import Control.Monad.Error.Class
 

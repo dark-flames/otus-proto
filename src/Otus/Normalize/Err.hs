@@ -1,15 +1,17 @@
 module Otus.Normalize.Err (
-  NormalizeErr (..),
-  NormalizeResult,
-)
-where
+  EvalError (..),
+  EvalResult,
+) where
 
 import Otus.Ast
 import Otus.Common
 
-data NormalizeErr
+data EvalError
   = Anyhow String
   | UnboundIndex Stage IndexId
+  | AppOnNonLambda Stage
+  | NatElimOnNonNat Stage
+  | JOnNonId Stage
   deriving (Eq, Show)
 
-type NormalizeResult = Result NormalizeErr
+type EvalResult = Result EvalError
