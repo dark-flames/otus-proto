@@ -9,4 +9,5 @@ jobs:
       - uses: actions/checkout@v5
       - uses: haskell-actions/run-fourmolu@v11
         with:
-          version: "latest"
+          version: "0.19.0.1"
+          extra-args: "--no-cabal"
