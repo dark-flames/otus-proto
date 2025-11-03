@@ -1,4 +1,7 @@
 module Otus.Ast.Term (
+  Telescope (..),
+  PartialSubstitution (..),
+  Substitution (..),
   Term (..),
 ) where
 
@@ -44,6 +47,8 @@ data Term
     ---- → {y : A} (p : x ≡ y)
     ---- → P y p
     J Term Term Term
+  | -- Universe
+    Type Stage Universe
   | -- Meta
     Lift Term
   | Quote Term
@@ -58,6 +63,4 @@ data Term
   | TyErr
   | DBind Term Term
   | Force Term
-  | -- Universe
-    Type Stage Universe
   deriving (Eq, Show)

@@ -25,7 +25,7 @@ evaluateObj env tm = case tm of
     evalObjApp fnVal argVal
   Nat -> return VNat
   Zero -> return VZero
-  Succ pre -> VSucc <$> evaluateObj env pre
+  Succ prev -> VSucc <$> evaluateObj env prev
   NatElim base step n -> do
     baseVal <- evaluateObj env base
     stepVal <- evaluateObj env step
@@ -42,11 +42,41 @@ evaluateObj env tm = case tm of
     proofVal <- evaluateObj env proof
     pathVal <- evaluateObj env path
     evalObjJ propVal proofVal pathVal
+  Type stage univ -> return $ VType stage univ
+  Dynamic tele obj -> do
+    teleVal <- evalTelescope env tele
+    objVal <- evaluateObj env obj
+    return $ VDynamic teleVal objVal
+  Ok subst obj -> do
+    substVal <- evalSubstitution env subst
+    objVal <- evaluateObj env obj
+    return $ VOk substVal objVal
+  TyErr -> return VTyErr
+  DBind next prev -> do
+    nextVal <- evaluateObj env next
+    prevVal <- evaluateObj env prev
+    evalObjDbind nextVal prevVal
   _ -> throwError $ Anyhow "unimplemented"
 
+-- evaluation of meta structures
 evalObjClosure :: Closure -> Value -> EvalResult Value
 evalObjClosure (Closure env tm) arg = evaluateObj (push env arg) tm
 
+evalTelescope :: Environment -> Telescope -> EvalResult VTelescope
+evalTelescope _ TNil = return VTNil
+evalTelescope env (TCons tm tele) = do
+  val <- evaluateObj env tm
+  teleVal <- evalTelescope (freshVar env) tele
+  return $ VTCons val teleVal
+
+evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
+evalSubstitution _ SNil = return VSNil
+evalSubstitution env (SCons tm subst) = do
+  val <- evaluateObj env tm
+  substVal <- evalSubstitution env subst
+  return $ VSCons val substVal
+
+-- evaluation of eliminations
 evalObjApp :: Value -> Value -> EvalResult Value
 evalObjApp fnVal argVal = case fnVal of
   VLam closure -> evalObjClosure closure argVal
@@ -56,12 +86,18 @@ evalObjApp fnVal argVal = case fnVal of
 evalObjApp' :: Value -> [Value] -> EvalResult Value
 evalObjApp' = foldlM evalObjApp
 
+evalObjAppSubst :: Value -> VSubstitution -> EvalResult Value
+evalObjAppSubst h VSNil = return h
+evalObjAppSubst h (VSCons arg subst) = do
+  h' <- evalObjApp h arg
+  evalObjAppSubst h' subst
+
 evalObjNatElim :: Value -> Value -> Value -> EvalResult Value
 evalObjNatElim baseVal stepVal = \case
   VZero -> return baseVal
-  VSucc pre -> do
-    recResVal <- evalObjNatElim baseVal stepVal pre
-    evalObjApp' stepVal [pre, recResVal]
+  VSucc prevVal -> do
+    recResVal <- evalObjNatElim baseVal stepVal prevVal
+    evalObjApp' stepVal [prevVal, recResVal]
   VNeutral neutral -> return $ VNeutral $ NNatElim baseVal stepVal neutral
   _ -> throwError $ NatElimOnNonNat Object
 
@@ -70,3 +106,12 @@ evalObjJ prop proof = \case
   VRefl -> return proof
   VNeutral neutral -> return $ VNeutral $ NJ prop proof neutral
   _ -> throwError $ JOnNonId Object
+
+evalObjDbind :: Value -> Value -> EvalResult Value
+evalObjDbind next = \case
+  VOk substVal prevVal -> do
+    h <- evalObjAppSubst next substVal
+    evalObjApp h prevVal
+  VTyErr -> return VTyErr
+  VNeutral neutral -> return $ VNeutral $ VDBind next neutral
+  _ -> throwError DBindOnNonDynamic

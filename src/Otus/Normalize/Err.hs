@@ -12,6 +12,7 @@ data EvalError
   | AppOnNonLambda Stage
   | NatElimOnNonNat Stage
   | JOnNonId Stage
+  | DBindOnNonDynamic
   deriving (Eq, Show)
 
 type EvalResult = Result EvalError
