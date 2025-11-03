@@ -10,6 +10,9 @@ function-arrows: leading
 # How to place commas in multi-line lists, records, etc. (choices: leading or trailing)
 comma-style: trailing
 
+# waiting for the next release of fourmolu to support this option
+# record-style: knr
+
 # Styling of import/export lists (choices: leading, trailing, or diff-friendly)
 import-export-style: diff-friendly
 
@@ -17,7 +20,7 @@ import-export-style: diff-friendly
 import-grouping: by-scope-then-qualified
 
 # Whether to full-indent or half-indent 'where' bindings past the preceding body
-indent-wheres: false
+indent-wheres: true
 
 # Whether to leave a space before an opening record brace
 record-brace-space: true
@@ -35,7 +38,7 @@ haddock-style-module: null
 haddock-location-signature: leading
 
 # Styling of let blocks (choices: auto, inline, newline, or mixed)
-let-style: inline
+let-style: newline
 
 # How to align the 'in' keyword with respect to the 'let' keyword (choices: left-align, right-align, or no-space)
 in-style: no-space

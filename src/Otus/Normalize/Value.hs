@@ -6,6 +6,7 @@ module Otus.Normalize.Value (
   Neutral (..),
   neutralApp,
   freshVar,
+  vMetaVar,
   pushVSubst,
 ) where
 
@@ -36,6 +37,7 @@ data Neutral
 
 data Value
   = VNeutral Neutral
+  | VMetaVar LevelId
   | VPi Value Closure
   | VLam Closure
   | VNat
@@ -57,6 +59,9 @@ neutralApp n arg = case n of
 
 freshVar :: (CtxLike e Value) => e -> e
 freshVar env = push env $ VNeutral $ NVar $ LevelId $ ctxLength env
+
+vMetaVar :: LevelId -> Value
+vMetaVar = VMetaVar
 
 pushVSubst :: (CtxLike e Value) => e -> VSubstitution -> e
 pushVSubst env VSNil = env
