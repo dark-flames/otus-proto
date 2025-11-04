@@ -49,6 +49,12 @@ data Term
     J Term Term Term
   | -- Universe
     Type Stage Universe
+  | -- Object
+    Dynamic Telescope Term
+  | Ok Substitution Term
+  | TyErr
+  | DBind Term Term
+  | Force Term
   | -- Meta
     Lift Term
   | Quote Term
@@ -57,10 +63,4 @@ data Term
   | Error
   | Bind Term Term
   | Unify Term Term
-  | -- Object
-    Dynamic Telescope Term
-  | Ok Substitution Term
-  | TyErr
-  | DBind Term Term
-  | Force Term
   deriving (Eq, Show)

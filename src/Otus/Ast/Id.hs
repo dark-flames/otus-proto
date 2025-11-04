@@ -17,11 +17,6 @@ class Contextual a where
 
 class (Contextual a) => CtxLike a e where
   findByIndex :: a -> Int -> Maybe e
-  push :: a -> e -> a
-
-  push' :: a -> [e] -> a
-  push' ctx [] = ctx
-  push' ctx (x : xs) = push' (push ctx x) xs
 
 class CtxIndex id where
   find :: (CtxLike a e) => a -> id -> Maybe e

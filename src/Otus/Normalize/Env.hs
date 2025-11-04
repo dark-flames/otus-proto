@@ -1,42 +1,66 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Otus.Normalize.Env (
   Environment (..),
-  envStage,
+  push,
+  push',
+  pushFreshVar,
+  pushVPSubst,
 ) where
 
-import Data.List ((!?))
 import Otus.Ast
 import {-# SOURCE #-} Otus.Normalize.Value
 
-data Environment
-  = ObjEnv [Value]
-  | MetaEnv
-      { outerEnv :: [Value],
-        metaEnv :: [Maybe Value],
-        innerEnv :: [Value]
-      }
+data Environment = Env
+  { prevEnv :: Maybe Environment,
+    metaEnv :: [Maybe Value],
+    currentEnv :: [Value]
+  }
   deriving (Eq, Show)
 
 instance Contextual Environment where
-  ctxLength (ObjEnv vals) = length vals
-  ctxLength (MetaEnv outer meta inner) = length outer + length meta + length inner
+  ctxLength (Env prev meta cur) =
+    maybe 0 ctxLength prev
+      + length meta
+      + length cur
 
 instance CtxLike Environment Value where
-  findByIndex (ObjEnv vals) i = vals !? i
-  findByIndex e@(MetaEnv outer meta inner) i
+  findByIndex :: Environment -> Int -> Maybe Value
+  findByIndex e@(Env prev meta inner) i
     | i < length inner = Just $ inner !! i
     | i - length inner < length meta = case meta !! (i - length inner) of
         Just val -> Just val
-        Nothing -> Just $ vMetaVar $ intoLevel e $ IndexId i
-    | otherwise = outer !? (i - length inner - length meta)
+        Nothing -> Just $ vMetaVar $ intoLevel e (IndexId i)
+    | otherwise = case prev of
+        Just p ->
+          mapMetaVar
+            <$> findByIndex p (i - length inner - length meta)
+        Nothing -> Nothing
 
-  push (ObjEnv vals) val = ObjEnv (val : vals)
-  push (MetaEnv outer meta inner) val =
-    MetaEnv
-      { outerEnv = outer,
-        metaEnv = meta,
-        innerEnv = val : inner
-      }
+push :: Environment -> Value -> Environment
+push (Env prev meta inner) val =
+  Env
+    { prevEnv = prev,
+      metaEnv = meta,
+      currentEnv = val : inner
+    }
 
-envStage :: Environment -> Stage
-envStage (ObjEnv _) = Object
-envStage (MetaEnv {}) = Meta
+push' :: Environment -> [Value] -> Environment
+push' = foldl push
+
+pushFreshVar :: Environment -> Environment
+pushFreshVar env = push env (freshVar env)
+
+pushVPSubst :: Environment -> VPartialSubstitution -> Environment
+pushVPSubst (Env prev meta []) pSubst =
+  Env
+    { prevEnv = prev,
+      metaEnv = vPSubstToList pSubst ++ meta,
+      currentEnv = []
+    }
+pushVPSubst prev pSubst =
+  Env
+    { prevEnv = Just prev,
+      metaEnv = vPSubstToList pSubst,
+      currentEnv = []
+    }

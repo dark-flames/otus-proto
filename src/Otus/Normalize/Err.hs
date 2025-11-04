@@ -8,10 +8,10 @@ import Otus.Common
 
 data EvalError
   = Anyhow String
-  | UnboundIndex Stage IndexId
-  | AppOnNonLambda Stage
-  | NatElimOnNonNat Stage
-  | JOnNonId Stage
+  | UnboundIndex IndexId
+  | AppOnNonLambda
+  | NatElimOnNonNat
+  | JOnNonId
   | DBindOnNonDynamic
   deriving (Eq, Show)
 
