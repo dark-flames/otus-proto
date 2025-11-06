@@ -8,7 +8,7 @@ module Otus.Normalize.Value (
   neutralApp,
   freshVar,
   vMetaVar,
-  mapMetaVar,
+  mapMetaVarToNormal,
   vPSubstToList,
 ) where
 
@@ -19,19 +19,13 @@ import Otus.Normalize.Env
 data Closure = Closure Environment Term
   deriving (Eq, Show)
 
-data VTelescope
-  = VTNil
-  | VTCons Value VTelescope
+newtype VTelescope = VTele [Value]
   deriving (Eq, Show)
 
-data VSubstitution
-  = VSNil
-  | VSCons Value VSubstitution
+newtype VSubstitution = VSubst [Value]
   deriving (Eq, Show)
 
-data VPartialSubstitution
-  = VPSNil
-  | VPSCons (Maybe Value) VPartialSubstitution
+newtype VPartialSubstitution = VPSubst [Maybe Value]
   deriving (Eq, Show)
 
 data Neutral
@@ -73,10 +67,9 @@ freshVar env = VNeutral $ NVar $ LevelId $ ctxLength env
 vMetaVar :: LevelId -> Value
 vMetaVar = VMetaVar
 
-mapMetaVar :: Value -> Value
-mapMetaVar (VMetaVar lvl) = VNeutral $ NVar lvl
-mapMetaVar val = val
+mapMetaVarToNormal :: Value -> Value
+mapMetaVarToNormal (VMetaVar lvl) = VNeutral $ NVar lvl
+mapMetaVarToNormal val = val
 
 vPSubstToList :: VPartialSubstitution -> [Maybe Value]
-vPSubstToList VPSNil = []
-vPSubstToList (VPSCons val rest) = vPSubstToList rest ++ [val]
+vPSubstToList (VPSubst vals) = vals

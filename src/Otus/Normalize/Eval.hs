@@ -66,18 +66,18 @@ evalClosure :: Closure -> Value -> EvalResult Value
 evalClosure (Closure env tm) arg = evaluate (push env arg) tm
 
 evalTelescope :: Environment -> Telescope -> EvalResult VTelescope
-evalTelescope _ TNil = return VTNil
+evalTelescope _ TNil = return $ VTele []
 evalTelescope env (TCons tm tele) = do
   val <- evaluate env tm
-  teleVal <- evalTelescope (pushFreshVar env) tele
-  return $ VTCons val teleVal
+  VTele teleVal <- evalTelescope (pushFreshVar env) tele
+  return $ VTele (val : teleVal)
 
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
-evalSubstitution _ SNil = return VSNil
+evalSubstitution _ SNil = return $ VSubst []
 evalSubstitution env (SCons tm subst) = do
   val <- evaluate env tm
-  substVal <- evalSubstitution env subst
-  return $ VSCons val substVal
+  VSubst substVal <- evalSubstitution env subst
+  return $ VSubst (val : substVal)
 
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value
@@ -90,10 +90,13 @@ evalApp' :: Value -> [Value] -> EvalResult Value
 evalApp' = foldlM evalApp
 
 evalAppSubst :: Value -> VSubstitution -> EvalResult Value
-evalAppSubst h VSNil = return h
-evalAppSubst h (VSCons arg subst) = do
-  h' <- evalApp h arg
-  evalAppSubst h' subst
+evalAppSubst f (VSubst args) = go f args
+  where
+    go h = \case
+      [] -> return h
+      arg : rest -> do
+        h' <- evalApp h arg
+        go h' rest
 
 evalNatElim :: Value -> Value -> Value -> EvalResult Value
 evalNatElim baseVal stepVal = \case

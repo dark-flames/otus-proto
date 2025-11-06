@@ -3,7 +3,7 @@ module Otus.Normalize.Value (
   VPartialSubstitution,
   vMetaVar,
   freshVar,
-  mapMetaVar,
+  mapMetaVarToNormal,
   vPSubstToList,
 ) where
 
@@ -23,5 +23,5 @@ instance Eq VPartialSubstitution
 
 vMetaVar :: LevelId -> Value
 freshVar :: (CtxLike e Value) => e -> Value
-mapMetaVar :: Value -> Value
+mapMetaVarToNormal :: Value -> Value
 vPSubstToList :: VPartialSubstitution -> [Maybe Value]
