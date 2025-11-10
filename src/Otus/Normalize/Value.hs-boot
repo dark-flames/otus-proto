@@ -1,27 +1,25 @@
 module Otus.Normalize.Value (
   Value,
-  VPartialSubstitution,
+  VTelescope (..),
   vMetaVar,
   freshVar,
   mapMetaVarToNormal,
-  vPSubstToList,
 ) where
 
 import Otus.Ast
 
 data Value
 
-data VPartialSubstitution
-
 instance Show Value
 
 instance Eq Value
 
-instance Show VPartialSubstitution
+newtype VTelescope = VTele [Value]
 
-instance Eq VPartialSubstitution
+instance Show VTelescope
+
+instance Eq VTelescope
 
 vMetaVar :: LevelId -> Value
 freshVar :: (CtxLike e Value) => e -> Value
 mapMetaVarToNormal :: Value -> Value
-vPSubstToList :: VPartialSubstitution -> [Maybe Value]

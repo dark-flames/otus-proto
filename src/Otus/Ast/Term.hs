@@ -1,6 +1,5 @@
 module Otus.Ast.Term (
   Telescope (..),
-  PartialSubstitution (..),
   Substitution (..),
   Term (..),
 ) where
@@ -8,19 +7,10 @@ module Otus.Ast.Term (
 import Otus.Ast.Id
 import Otus.Ast.Univ
 
-data Telescope
-  = TNil
-  | TCons Term Telescope
+newtype Telescope = Tele [Term]
   deriving (Eq, Show)
 
-data PartialSubstitution
-  = PSNil
-  | PSCons (Maybe Term) PartialSubstitution
-  deriving (Eq, Show)
-
-data Substitution
-  = SNil
-  | SCons Term Substitution
+newtype Substitution = Subst [Term]
   deriving (Eq, Show)
 
 data Term
@@ -59,7 +49,7 @@ data Term
     Lift Term
   | Quote Term
   | Local Telescope Term
-  | Partial PartialSubstitution Term
+  | Partial Telescope Substitution Term
   | Error
   | Bind Term Term
   | Unify Term Term

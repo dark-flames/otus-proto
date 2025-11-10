@@ -2,14 +2,12 @@ module Otus.Normalize.Value (
   Closure (..),
   VTelescope (..),
   VSubstitution (..),
-  VPartialSubstitution,
   Value (..),
   Neutral (..),
   neutralApp,
   freshVar,
   vMetaVar,
   mapMetaVarToNormal,
-  vPSubstToList,
 ) where
 
 import Data.List.NonEmpty (NonEmpty, singleton, (<|))
@@ -25,15 +23,12 @@ newtype VTelescope = VTele [Value]
 newtype VSubstitution = VSubst [Value]
   deriving (Eq, Show)
 
-newtype VPartialSubstitution = VPSubst [Maybe Value]
-  deriving (Eq, Show)
-
 data Neutral
   = NVar LevelId
   | NApp Neutral (NonEmpty Value)
   | NNatElim Value Value Neutral
   | NJ Value Value Neutral
-  | VDBind Value Neutral
+  | VDBind Closure Neutral
   deriving (Eq, Show)
 
 data Value
@@ -53,7 +48,8 @@ data Value
   | VTyErr
   | -- Meta
     VLocal VTelescope Value
-  | VPartial VPartialSubstitution Value
+  | VPartial VTelescope VSubstitution Value
+  | VError
   deriving (Eq, Show)
 
 neutralApp :: Neutral -> Value -> Neutral
@@ -70,6 +66,3 @@ vMetaVar = VMetaVar
 mapMetaVarToNormal :: Value -> Value
 mapMetaVarToNormal (VMetaVar lvl) = VNeutral $ NVar lvl
 mapMetaVarToNormal val = val
-
-vPSubstToList :: VPartialSubstitution -> [Maybe Value]
-vPSubstToList (VPSubst vals) = vals

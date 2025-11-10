@@ -7,7 +7,7 @@ module Otus.Normalize.Env (
   pushMeta,
   pushMeta',
   pushFreshVar,
-  pushVPSubst,
+  pushMetaTele,
 ) where
 
 import Data.List ((!?))
@@ -72,5 +72,5 @@ pushMeta' prev vals =
 pushFreshVar :: Environment -> Environment
 pushFreshVar env = push env (freshVar env)
 
-pushVPSubst :: Environment -> VPartialSubstitution -> Environment
-pushVPSubst env = pushMeta' env . vPSubstToList
+pushMetaTele :: Environment -> VTelescope -> Environment
+pushMetaTele env (VTele tys) = pushMeta' env (map (const Nothing) tys)

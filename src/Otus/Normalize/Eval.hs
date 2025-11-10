@@ -44,19 +44,37 @@ evaluate env tm = case tm of
     pathVal <- go path
     evalJ propVal proofVal pathVal
   Type stage univ -> return $ VType stage univ
-  Dynamic tele obj -> do
+  -- Object
+  Dynamic tele ty -> do
     teleVal <- evalTelescope env tele
-    objVal <- go obj
-    return $ VDynamic teleVal objVal
-  Ok subst obj -> do
+    tyVal <- go ty
+    return $ VDynamic teleVal tyVal
+  Ok subst res -> do
     substVal <- evalSubstitution env subst
-    objVal <- go obj
-    return $ VOk substVal objVal
+    resVal <- go res
+    return $ VOk substVal resVal
   TyErr -> return VTyErr
   DBind next prev -> do
-    nextVal <- go next
     prevVal <- go prev
-    evalDbind nextVal prevVal
+    evalDbind (Closure env next) prevVal
+  ---- todo : Force
+  -- Meta
+  ---- todo : Lift
+  ---- todo : Quote
+  Local tele ty -> do
+    teleVal <- evalTelescope env tele
+    tyVal <- go ty
+    return $ VLocal teleVal tyVal
+  Partial domain subst res -> do
+    domainVal <- evalTelescope env domain
+    let
+      env' = pushMetaTele env domainVal
+    substVal <- evalSubstitution env' subst
+    resVal <- evaluate env' res
+    return $ VPartial domainVal substVal resVal
+  Error -> return VError
+  ---- todo : Bind
+  ---- todo : Unify
   _ -> throwError $ Anyhow "unimplemented"
   where
     go = evaluate env
@@ -65,19 +83,21 @@ evaluate env tm = case tm of
 evalClosure :: Closure -> Value -> EvalResult Value
 evalClosure (Closure env tm) arg = evaluate (push env arg) tm
 
+evalClosure' :: Closure -> [Value] -> EvalResult Value
+evalClosure' (Closure env tm) args = evaluate (push' env args) tm
+
 evalTelescope :: Environment -> Telescope -> EvalResult VTelescope
-evalTelescope _ TNil = return $ VTele []
-evalTelescope env (TCons tm tele) = do
-  val <- evaluate env tm
-  VTele teleVal <- evalTelescope (pushFreshVar env) tele
-  return $ VTele (val : teleVal)
+evalTelescope env (Tele tys) = VTele <$> go env tys
+  where
+    go e = \case
+      [] -> return []
+      ty : tele -> do
+        tyVal <- evaluate e ty
+        teleVal <- go (pushFreshVar e) tele
+        return (tyVal : teleVal)
 
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
-evalSubstitution _ SNil = return $ VSubst []
-evalSubstitution env (SCons tm subst) = do
-  val <- evaluate env tm
-  VSubst substVal <- evalSubstitution env subst
-  return $ VSubst (val : substVal)
+evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
 
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value
@@ -88,15 +108,6 @@ evalApp fnVal argVal = case fnVal of
 
 evalApp' :: Value -> [Value] -> EvalResult Value
 evalApp' = foldlM evalApp
-
-evalAppSubst :: Value -> VSubstitution -> EvalResult Value
-evalAppSubst f (VSubst args) = go f args
-  where
-    go h = \case
-      [] -> return h
-      arg : rest -> do
-        h' <- evalApp h arg
-        go h' rest
 
 evalNatElim :: Value -> Value -> Value -> EvalResult Value
 evalNatElim baseVal stepVal = \case
@@ -113,11 +124,11 @@ evalJ prop proof = \case
   VNeutral neutral -> return $ VNeutral $ NJ prop proof neutral
   _ -> throwError JOnNonId
 
-evalDbind :: Value -> Value -> EvalResult Value
-evalDbind next = \case
-  VOk substVal prevVal -> do
-    h <- evalAppSubst next substVal
+evalDbind :: Closure -> Value -> EvalResult Value
+evalDbind nextCls = \case
+  VOk (VSubst subst) prevVal -> do
+    h <- evalClosure' nextCls (subst ++ [prevVal])
     evalApp h prevVal
   VTyErr -> return VTyErr
-  VNeutral neutral -> return $ VNeutral $ VDBind next neutral
+  VNeutral neutral -> return $ VNeutral $ VDBind nextCls neutral
   _ -> throwError DBindOnNonDynamic
