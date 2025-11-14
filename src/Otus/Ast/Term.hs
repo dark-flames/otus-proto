@@ -20,8 +20,8 @@ data Term
   | Lam Term
   | App Term Term
   | -- Natural numbers
-    Nat
-  | Zero
+    Nat Stage
+  | Zero Stage
   | Succ Term
   | ---- NatElim : {P : Nat → Set}
     ---- → P 0

@@ -24,8 +24,8 @@ evaluate env tm = case tm of
     fnVal <- go fn
     argVal <- go arg
     evalApp fnVal argVal
-  Nat -> return VNat
-  Zero -> return VZero
+  Nat s -> return $ VNat s
+  Zero s -> return $ VZero s
   Succ prev -> VSucc <$> go prev
   NatElim base step n -> do
     baseVal <- go base
@@ -140,7 +140,7 @@ evalApp' = foldlM evalApp
 
 evalNatElim :: Value -> Value -> Value -> EvalResult Value
 evalNatElim baseVal stepVal = \case
-  VZero -> return baseVal
+  VZero _ -> return baseVal
   VSucc prevVal -> do
     recResVal <- evalNatElim baseVal stepVal prevVal
     evalApp' stepVal [prevVal, recResVal]

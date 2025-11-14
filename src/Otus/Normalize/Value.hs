@@ -37,8 +37,8 @@ data Value
   | VMetaVar LevelId
   | VPi Value Closure
   | VLam Closure
-  | VNat
-  | VZero
+  | VNat Stage
+  | VZero Stage
   | VSucc Value
   | VId Value Value Value
   | VRefl
