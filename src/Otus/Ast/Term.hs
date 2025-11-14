@@ -51,6 +51,9 @@ data Term
   | Local Telescope Term
   | Partial Telescope Substitution Term
   | Error
-  | Bind Term Term
+  | ---- Γ |- p : Local Δ T   Γ Δ , T |- n B
+    -----------------------------------------
+    ---- Γ |- let open p in n : Local Δ,T B
+    LetOpen Term Term
   | Unify Term Term
   deriving (Eq, Show)

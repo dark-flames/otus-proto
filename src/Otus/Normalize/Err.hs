@@ -13,6 +13,7 @@ data EvalError
   | NatElimOnNonNat
   | JOnNonId
   | DBindOnNonDynamic
+  | OpenNonLocal
   deriving (Eq, Show)
 
 type EvalResult = Result EvalError

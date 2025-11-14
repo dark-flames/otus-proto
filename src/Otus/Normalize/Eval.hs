@@ -48,11 +48,11 @@ evaluate env tm = case tm of
   Dynamic tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
-    return $ VDynamic teleVal tyVal
+    return $ evalDynamic teleVal tyVal
   Ok subst res -> do
     substVal <- evalSubstitution env subst
     resVal <- go res
-    return $ VOk substVal resVal
+    return $ evalOk substVal resVal
   TyErr -> return VTyErr
   DBind next prev -> do
     prevVal <- go prev
@@ -64,16 +64,18 @@ evaluate env tm = case tm of
   Local tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
-    return $ VLocal teleVal tyVal
+    return $ evalLocal teleVal tyVal
   Partial domain subst res -> do
     domainVal <- evalTelescope env domain
     let
       env' = pushMetaTele env domainVal
     substVal <- evalSubstitution env' subst
     resVal <- evaluate env' res
-    return $ VPartial domainVal substVal resVal
+    return $ evalPartial domainVal substVal resVal
   Error -> return VError
-  ---- todo : Bind
+  LetOpen next prev -> do
+    prevVal <- go prev
+    evalOpen (Closure env next) prevVal
   ---- todo : Unify
   _ -> throwError $ Anyhow "unimplemented"
   where
@@ -99,11 +101,38 @@ evalTelescope env (Tele tys) = VTele <$> go env tys
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
 evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
 
+-- currying of telescope
+evalDynamic :: VTelescope -> Value -> Value
+evalDynamic teleVal = \case
+  VDynamic teleVal' val -> VDynamic (teleVal <> teleVal') val
+  val -> VDynamic teleVal val
+
+evalOk :: VSubstitution -> Value -> Value
+evalOk substVal = \case
+  VOk substVal' val -> VOk (substVal <> substVal') val
+  VError -> VError
+  val -> VOk substVal val
+
+evalLocal :: VTelescope -> Value -> Value
+evalLocal teleVal = \case
+  VLocal teleVal' val -> VLocal (teleVal <> teleVal') val
+  val -> VLocal teleVal val
+
+evalPartial :: VTelescope -> VSubstitution -> Value -> Value
+evalPartial teleVal substVal = \case
+  VPartial teleVal' substVal' val ->
+    let
+      resTele = teleVal <> teleVal'
+      resSubst = substVal <> substVal'
+    in
+      VPartial resTele resSubst val
+  val -> VPartial teleVal substVal val
+
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value
 evalApp fnVal argVal = case fnVal of
   VLam closure -> evalClosure closure argVal
-  VNeutral neutral -> return $ VNeutral $ neutralApp neutral argVal
+  VNeutral neutral -> returnNeutral $ neutralApp neutral argVal
   _ -> throwError AppOnNonLambda
 
 evalApp' :: Value -> [Value] -> EvalResult Value
@@ -115,20 +144,36 @@ evalNatElim baseVal stepVal = \case
   VSucc prevVal -> do
     recResVal <- evalNatElim baseVal stepVal prevVal
     evalApp' stepVal [prevVal, recResVal]
-  VNeutral neutral -> return $ VNeutral $ NNatElim baseVal stepVal neutral
+  VNeutral neutral -> returnNeutral $ NNatElim baseVal stepVal neutral
   _ -> throwError NatElimOnNonNat
 
 evalJ :: Value -> Value -> Value -> EvalResult Value
 evalJ prop proof = \case
   VRefl -> return proof
-  VNeutral neutral -> return $ VNeutral $ NJ prop proof neutral
+  VNeutral neutral -> returnNeutral $ NJ prop proof neutral
   _ -> throwError JOnNonId
 
 evalDbind :: Closure -> Value -> EvalResult Value
 evalDbind nextCls = \case
   VOk (VSubst subst) prevVal -> do
-    h <- evalClosure' nextCls (subst ++ [prevVal])
-    evalApp h prevVal
+    let
+      subst' = subst ++ [prevVal]
+    res <- evalClosure' nextCls subst'
+    return $ evalOk (VSubst subst') res
   VTyErr -> return VTyErr
-  VNeutral neutral -> return $ VNeutral $ VDBind nextCls neutral
+  VNeutral neutral -> returnNeutral $ VDBind nextCls neutral
   _ -> throwError DBindOnNonDynamic
+
+evalOpen :: Closure -> Value -> EvalResult Value
+evalOpen nextCls = \case
+  VPartial teleVal (VSubst substVals) val -> do
+    let
+      subst' = substVals ++ [val]
+    res <- evalClosure' nextCls subst'
+    return $ evalPartial teleVal (VSubst subst') res
+  VNeutral neutral -> returnNeutral $ VOpen nextCls neutral
+  _ -> throwError OpenNonLocal
+
+-- utils
+returnNeutral :: Neutral -> EvalResult Value
+returnNeutral = return . VNeutral

@@ -29,6 +29,7 @@ data Neutral
   | NNatElim Value Value Neutral
   | NJ Value Value Neutral
   | VDBind Closure Neutral
+  | VOpen Closure Neutral
   deriving (Eq, Show)
 
 data Value
@@ -51,6 +52,12 @@ data Value
   | VPartial VTelescope VSubstitution Value
   | VError
   deriving (Eq, Show)
+
+instance Semigroup VTelescope where
+  (VTele l) <> (VTele r) = VTele (l ++ r)
+
+instance Semigroup VSubstitution where
+  (VSubst l) <> (VSubst r) = VSubst (l ++ r)
 
 neutralApp :: Neutral -> Value -> Neutral
 neutralApp n arg = case n of
