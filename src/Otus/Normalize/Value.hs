@@ -44,11 +44,14 @@ data Value
   | VRefl
   | VType Stage Universe
   | -- Object
-    VDynamic VTelescope Value
+    VForce Value
+  | VDynamic VTelescope Value
   | VOk VSubstitution Value
   | VTyErr
   | -- Meta
-    VLocal VTelescope Value
+    VLift Value
+  | VQuote Value
+  | VLocal VTelescope Value
   | VPartial VTelescope VSubstitution Value
   | VError
   deriving (Eq, Show)

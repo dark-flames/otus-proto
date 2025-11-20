@@ -45,6 +45,9 @@ evaluate env tm = case tm of
     evalJ propVal proofVal pathVal
   Type stage univ -> return $ VType stage univ
   -- Object
+  Force metaTm -> do
+    metaVal <- go metaTm
+    return $ evalForce metaVal
   Dynamic tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
@@ -57,10 +60,13 @@ evaluate env tm = case tm of
   DBind next prev -> do
     prevVal <- go prev
     evalDbind (Closure env next) prevVal
-  ---- todo : Force
   -- Meta
-  ---- todo : Lift
-  ---- todo : Quote
+  Lift objTy -> do
+    objTyVal <- go objTy
+    return $ evalLift objTyVal
+  Quote objTm -> do
+    objVal <- go objTm
+    return $ evalQuote objVal
   Local tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
@@ -76,8 +82,7 @@ evaluate env tm = case tm of
   LetOpen next prev -> do
     prevVal <- go prev
     evalOpen (Closure env next) prevVal
-  ---- todo : Unify
-  _ -> throwError $ Anyhow "unimplemented"
+  Unify _ _ -> throwError $ Anyhow "unimplemented"
   where
     go = evaluate env
 
@@ -94,39 +99,60 @@ evalTelescope env (Tele tys) = VTele <$> go env tys
     go e = \case
       [] -> return []
       ty : tele -> do
-        tyVal <- evaluate e ty
-        teleVal <- go (pushFreshVar e) tele
-        return (tyVal : teleVal)
+        vTy <- evaluate e ty
+        vTele <- go (pushFreshVar e) tele
+        return (vTy : vTele)
 
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
 evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
 
 -- currying of telescope
 evalDynamic :: VTelescope -> Value -> Value
-evalDynamic teleVal = \case
-  VDynamic teleVal' val -> VDynamic (teleVal <> teleVal') val
-  val -> VDynamic teleVal val
+evalDynamic vTele = \case
+  VDynamic vTele' val -> VDynamic (vTele <> vTele') val
+  val -> VDynamic vTele val
 
 evalOk :: VSubstitution -> Value -> Value
-evalOk substVal = \case
-  VOk substVal' val -> VOk (substVal <> substVal') val
-  VError -> VError
-  val -> VOk substVal val
+evalOk vSubst = \case
+  VOk vSubst' val -> VOk (vSubst <> vSubst') val
+  VTyErr -> VTyErr
+  val -> VOk vSubst val
 
 evalLocal :: VTelescope -> Value -> Value
-evalLocal teleVal = \case
-  VLocal teleVal' val -> VLocal (teleVal <> teleVal') val
-  val -> VLocal teleVal val
+evalLocal vTele = \case
+  VLocal vTele' val -> VLocal (vTele <> vTele') val
+  val -> VLocal vTele val
 
 evalPartial :: VTelescope -> VSubstitution -> Value -> Value
-evalPartial teleVal substVal = \case
-  VPartial teleVal' substVal' val ->
+evalPartial vTele vSubst = \case
+  VPartial vTele' vSubst' val ->
     let
-      resTele = teleVal <> teleVal'
-      resSubst = substVal <> substVal'
+      resTele = vTele <> vTele'
+      resSubst = vSubst <> vSubst'
     in
       VPartial resTele resSubst val
-  val -> VPartial teleVal substVal val
+  VError -> VError
+  val -> VPartial vTele vSubst val
+
+-- staging
+evalForce :: Value -> Value
+evalForce = \case
+  VPartial (VTele domain) vSubst res -> case domain of
+    [] -> evalOk vSubst (evalForce res)
+    _ -> VError
+  VQuote val -> val
+  val -> VForce val
+
+evalLift :: Value -> Value
+evalLift = \case
+  VDynamic teleVal tyVal -> VLocal teleVal (evalLift tyVal)
+  tyVal -> VLift tyVal
+
+evalQuote :: Value -> Value
+evalQuote = \case
+  VOk substVal val -> evalPartial (VTele []) substVal (evalQuote val)
+  VError -> VError
+  val -> VQuote val
 
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value
