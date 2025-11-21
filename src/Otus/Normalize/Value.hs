@@ -3,7 +3,7 @@ module Otus.Normalize.Value (
   VTelescope (..),
   VSubstitution (..),
   VConstraint (..),
-  VGuardedSubstSeg (..),
+  VGuardedSubstSeg (.., UnsolvedMeta, SolvedMeta),
   VGuardedSubstitution (..),
   Value (..),
   Neutral (..),
@@ -13,6 +13,7 @@ module Otus.Normalize.Value (
 ) where
 
 import Data.List.NonEmpty (NonEmpty, singleton, (<|))
+
 import Otus.Ast
 import Otus.Normalize.Env
 
@@ -34,6 +35,20 @@ data VGuardedSubstSeg
   = VUnsolved
   | VSolved Value [VConstraint]
   deriving (Eq, Show)
+
+metaView :: VGuardedSubstSeg -> Maybe Value
+metaView = \case
+  VUnsolved -> Nothing
+  VSolved val [] -> Just val
+  VSolved _ (_ : _) -> Nothing
+
+pattern UnsolvedMeta :: VGuardedSubstSeg
+pattern UnsolvedMeta <- (metaView -> Nothing)
+
+pattern SolvedMeta :: Value -> VGuardedSubstSeg
+pattern SolvedMeta val <- (metaView -> Just val)
+
+{-# COMPLETE UnsolvedMeta, SolvedMeta #-}
 
 newtype VGuardedSubstitution = VGSubst [VGuardedSubstSeg]
   deriving (Eq, Show)

@@ -10,4 +10,3 @@ jobs:
       - uses: haskell-actions/run-fourmolu@v11
         with:
           version: "0.19.0.1"
-          extra-args: "--no-cabal"

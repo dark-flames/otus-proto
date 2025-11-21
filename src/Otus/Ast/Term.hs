@@ -8,10 +8,10 @@ module Otus.Ast.Term (
   Term (..),
 ) where
 
+import qualified Data.IntMap as IM
+
 import Otus.Ast.Id
 import Otus.Ast.Univ
-
-import qualified Data.IntMap as IM
 
 newtype Telescope = Tele [Term]
   deriving (Eq, Show)

@@ -24,9 +24,9 @@ library
       Otus.Common
       Otus.Common.Result
       Otus.Normalize
+      Otus.Normalize.Control
       Otus.Normalize.Env
       Otus.Normalize.Eval
-      Otus.Normalize.Result
       Otus.Normalize.Solve
       Otus.Normalize.Value
   other-modules:

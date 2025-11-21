@@ -3,11 +3,11 @@ module Otus.Normalize.Eval (
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
-import Control.Monad.Trans (MonadTrans (lift))
 import Data.Foldable (foldlM)
+
 import Otus.Ast
+import Otus.Normalize.Control
 import Otus.Normalize.Env
-import Otus.Normalize.Result
 import Otus.Normalize.Value
 
 evaluate :: Environment -> Term -> EvalResult Value
@@ -73,9 +73,12 @@ evaluate env tm = case tm of
     tyVal <- go ty
     return $ extendLocal teleVal tyVal
   Guarded gSubst res -> do
-    (gSubstVal, gEnv) <- runGuardedResult (evalGuardSubst gSubst) env
-    resVal <- evaluate (intoEnv gEnv) res
-    return $ VGuarded gSubstVal resVal
+    (gSubstVal, env') <- evalGuardSubst env gSubst
+    resVal <- evaluate env' res
+    let
+      guardedVal = extendGuarded gSubstVal resVal
+    -- todo : solve
+    return guardedVal
   -- Todo : Weakening
   -- Todo : LetOpen
   Error -> return VError
@@ -103,18 +106,28 @@ evalTelescope env (Tele tys) = VTele <$> go env tys
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
 evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
 
-evalConstraint :: Constraint -> GuardedEvalResult VConstraint
+evalConstraint :: Environment -> Constraint -> EvalResult VConstraint
 evalConstraint = undefined
 
-evalGuardSeg :: GuardedSubstSeg -> GuardedEvalResult VGuardedSubstSeg
-evalGuardSeg Unsolved = doPushVGSeg VUnsolved >> return VUnsolved
-evalGuardSeg (Solved tm constrs) = do
-  val <- doEvaluate tm
-  constrVals <- mapM evalConstraint constrs
-  return (VSolved val constrVals)
+evalGuardSeg :: Environment -> GuardedSubstSeg -> EvalResult VGuardedSubstSeg
+evalGuardSeg env = \case
+  Unsolved -> return VUnsolved
+  (Solved tm constrs) -> do
+    val <- evaluate env tm
+    constrVals <- mapM (evalConstraint env) constrs
+    return (VSolved val constrVals)
 
-evalGuardSubst :: GuardedSubstitution -> GuardedEvalResult VGuardedSubstitution
-evalGuardSubst (GSubst gSubst) = VGSubst <$> mapM evalGuardSeg gSubst
+evalGuardSubst :: Environment -> GuardedSubstitution -> EvalResult (VGuardedSubstitution, Environment)
+evalGuardSubst env (GSubst gSubst) = case gSubst of
+  [] -> return (VGSubst [], env)
+  seg : segs -> do
+    vSeg <- evalGuardSeg env seg
+    let
+      e = case vSeg of
+        UnsolvedMeta -> pushFreshVar env
+        SolvedMeta val -> push env val
+    (VGSubst vSegs, e') <- evalGuardSubst e (GSubst segs)
+    return (VGSubst $ vSeg : vSegs, e')
 
 -- currying of telescope
 extendDynamic :: VTelescope -> Value -> Value
@@ -221,8 +234,3 @@ evalDbind nextCls = \case
 -- utils
 returnNeutral :: Neutral -> EvalResult Value
 returnNeutral = return . VNeutral
-
-doEvaluate :: Term -> GuardedEvalResult Value
-doEvaluate tm = do
-  env <- doGetEnv
-  lift $ evaluate env tm
