@@ -3,10 +3,11 @@ module Otus.Normalize.Eval (
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.Trans (MonadTrans (lift))
 import Data.Foldable (foldlM)
 import Otus.Ast
 import Otus.Normalize.Env
-import Otus.Normalize.Err
+import Otus.Normalize.Result
 import Otus.Normalize.Value
 
 evaluate :: Environment -> Term -> EvalResult Value
@@ -51,11 +52,11 @@ evaluate env tm = case tm of
   Dynamic tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
-    return $ evalDynamic teleVal tyVal
+    return $ extendDynamic teleVal tyVal
   Ok subst res -> do
     substVal <- evalSubstitution env subst
     resVal <- go res
-    return $ evalOk substVal resVal
+    return $ extendOk substVal resVal
   TyErr -> return VTyErr
   DBind next prev -> do
     prevVal <- go prev
@@ -70,19 +71,15 @@ evaluate env tm = case tm of
   Local tele ty -> do
     teleVal <- evalTelescope env tele
     tyVal <- go ty
-    return $ evalLocal teleVal tyVal
-  Partial domain subst res -> do
-    domainVal <- evalTelescope env domain
-    let
-      env' = pushMetaTele env domainVal
-    substVal <- evalSubstitution env' subst
-    resVal <- evaluate env' res
-    return $ evalPartial domainVal substVal resVal
+    return $ extendLocal teleVal tyVal
+  Guarded gSubst res -> do
+    (gSubstVal, gEnv) <- runGuardedResult (evalGuardSubst gSubst) env
+    resVal <- evaluate (intoEnv gEnv) res
+    return $ VGuarded gSubstVal resVal
+  -- Todo : Weakening
+  -- Todo : LetOpen
   Error -> return VError
-  LetOpen next prev -> do
-    prevVal <- go prev
-    evalOpen (Closure env next) prevVal
-  Unify _ _ -> throwError $ Anyhow "unimplemented"
+  _ -> undefined
   where
     go = evaluate env
 
@@ -106,40 +103,49 @@ evalTelescope env (Tele tys) = VTele <$> go env tys
 evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
 evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
 
+evalConstraint :: Constraint -> GuardedEvalResult VConstraint
+evalConstraint = undefined
+
+evalGuardSeg :: GuardedSubstSeg -> GuardedEvalResult VGuardedSubstSeg
+evalGuardSeg Unsolved = doPushVGSeg VUnsolved >> return VUnsolved
+evalGuardSeg (Solved tm constrs) = do
+  val <- doEvaluate tm
+  constrVals <- mapM evalConstraint constrs
+  return (VSolved val constrVals)
+
+evalGuardSubst :: GuardedSubstitution -> GuardedEvalResult VGuardedSubstitution
+evalGuardSubst (GSubst gSubst) = VGSubst <$> mapM evalGuardSeg gSubst
+
 -- currying of telescope
-evalDynamic :: VTelescope -> Value -> Value
-evalDynamic vTele = \case
+extendDynamic :: VTelescope -> Value -> Value
+extendDynamic vTele = \case
   VDynamic vTele' val -> VDynamic (vTele <> vTele') val
   val -> VDynamic vTele val
 
-evalOk :: VSubstitution -> Value -> Value
-evalOk vSubst = \case
+extendOk :: VSubstitution -> Value -> Value
+extendOk vSubst = \case
   VOk vSubst' val -> VOk (vSubst <> vSubst') val
   VTyErr -> VTyErr
   val -> VOk vSubst val
 
-evalLocal :: VTelescope -> Value -> Value
-evalLocal vTele = \case
+extendLocal :: VTelescope -> Value -> Value
+extendLocal vTele = \case
   VLocal vTele' val -> VLocal (vTele <> vTele') val
   val -> VLocal vTele val
 
-evalPartial :: VTelescope -> VSubstitution -> Value -> Value
-evalPartial vTele vSubst = \case
-  VPartial vTele' vSubst' val ->
-    let
-      resTele = vTele <> vTele'
-      resSubst = vSubst <> vSubst'
-    in
-      VPartial resTele resSubst val
+extendGuarded :: VGuardedSubstitution -> Value -> Value
+extendGuarded vGuard = \case
+  VGuarded innerVGuard val -> VGuarded (vGuard <> innerVGuard) val
   VError -> VError
-  val -> VPartial vTele vSubst val
+  val -> VGuarded vGuard val
 
 -- staging
 evalForce :: Value -> Value
 evalForce = \case
-  VPartial (VTele domain) vSubst res -> case domain of
-    [] -> evalOk vSubst (evalForce res)
-    _ -> VError
+  VGuarded vGuarded val -> case forceVGuardedSubst vGuarded of
+    Just vSubst -> VOk vSubst val
+    Nothing -> VTyErr -- Should unsolved meta variables be allowed here?
+  VError -> VTyErr
   VQuote val -> val
   val -> VForce val
 
@@ -150,9 +156,31 @@ evalLift = \case
 
 evalQuote :: Value -> Value
 evalQuote = \case
-  VOk substVal val -> evalPartial (VTele []) substVal (evalQuote val)
-  VError -> VError
+  VOk substVal val -> extendGuarded (vSubstIntoGuarded substVal) (evalQuote val)
+  VTyErr -> VError
   val -> VQuote val
+
+vSubstIntoGuarded :: VSubstitution -> VGuardedSubstitution
+vSubstIntoGuarded (VSubst vals) = VGSubst (map f vals)
+  where
+    f val = VSolved val []
+
+forceVGuardedSeg :: VGuardedSubstSeg -> Maybe Value
+forceVGuardedSeg = \case
+  VUnsolved -> Nothing
+  VSolved val constraints
+    | null constraints -> Just val
+    | otherwise -> Nothing
+
+forceVGuardedSubst :: VGuardedSubstitution -> Maybe VSubstitution
+forceVGuardedSubst (VGSubst segs) = VSubst <$> go segs
+  where
+    go = \case
+      [] -> Just []
+      seg : rest -> do
+        val <- forceVGuardedSeg seg
+        vals <- go rest
+        return $ val : vals
 
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value
@@ -185,21 +213,16 @@ evalDbind nextCls = \case
     let
       subst' = subst ++ [prevVal]
     res <- evalClosure' nextCls subst'
-    return $ evalOk (VSubst subst') res
+    return $ extendOk (VSubst subst') res
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ VDBind nextCls neutral
   _ -> throwError DBindOnNonDynamic
 
-evalOpen :: Closure -> Value -> EvalResult Value
-evalOpen nextCls = \case
-  VPartial teleVal (VSubst substVals) val -> do
-    let
-      subst' = substVals ++ [val]
-    res <- evalClosure' nextCls subst'
-    return $ evalPartial teleVal (VSubst subst') res
-  VNeutral neutral -> returnNeutral $ VOpen nextCls neutral
-  _ -> throwError OpenNonLocal
-
 -- utils
 returnNeutral :: Neutral -> EvalResult Value
 returnNeutral = return . VNeutral
+
+doEvaluate :: Term -> GuardedEvalResult Value
+doEvaluate tm = do
+  env <- doGetEnv
+  lift $ evaluate env tm

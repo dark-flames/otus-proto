@@ -2,12 +2,14 @@ module Otus.Normalize.Value (
   Closure (..),
   VTelescope (..),
   VSubstitution (..),
+  VConstraint (..),
+  VGuardedSubstSeg (..),
+  VGuardedSubstitution (..),
   Value (..),
   Neutral (..),
   neutralApp,
   freshVar,
-  vMetaVar,
-  mapMetaVarToNormal,
+  vVar,
 ) where
 
 import Data.List.NonEmpty (NonEmpty, singleton, (<|))
@@ -23,6 +25,19 @@ newtype VTelescope = VTele [Value]
 newtype VSubstitution = VSubst [Value]
   deriving (Eq, Show)
 
+data VConstraint
+  = VTyEq VTelescope Neutral Neutral
+  | VTmEq VTelescope Neutral Neutral
+  deriving (Eq, Show)
+
+data VGuardedSubstSeg
+  = VUnsolved
+  | VSolved Value [VConstraint]
+  deriving (Eq, Show)
+
+newtype VGuardedSubstitution = VGSubst [VGuardedSubstSeg]
+  deriving (Eq, Show)
+
 data Neutral
   = NVar LevelId
   | NApp Neutral (NonEmpty Value)
@@ -34,7 +49,6 @@ data Neutral
 
 data Value
   = VNeutral Neutral
-  | VMetaVar LevelId
   | VPi Value Closure
   | VLam Closure
   | VNat Stage
@@ -52,7 +66,7 @@ data Value
     VLift Value
   | VQuote Value
   | VLocal VTelescope Value
-  | VPartial VTelescope VSubstitution Value
+  | VGuarded VGuardedSubstitution Value
   | VError
   deriving (Eq, Show)
 
@@ -62,6 +76,9 @@ instance Semigroup VTelescope where
 instance Semigroup VSubstitution where
   (VSubst l) <> (VSubst r) = VSubst (l ++ r)
 
+instance Semigroup VGuardedSubstitution where
+  (VGSubst l) <> (VGSubst r) = VGSubst (l ++ r)
+
 neutralApp :: Neutral -> Value -> Neutral
 neutralApp n arg = case n of
   NApp h args -> NApp h (arg <| args)
@@ -70,9 +87,5 @@ neutralApp n arg = case n of
 freshVar :: (CtxLike e Value) => e -> Value
 freshVar env = VNeutral $ NVar $ LevelId $ ctxLength env
 
-vMetaVar :: LevelId -> Value
-vMetaVar = VMetaVar
-
-mapMetaVarToNormal :: Value -> Value
-mapMetaVarToNormal (VMetaVar lvl) = VNeutral $ NVar lvl
-mapMetaVarToNormal val = val
+vVar :: LevelId -> Value
+vVar = VNeutral . NVar

@@ -1,16 +1,43 @@
 module Otus.Ast.Term (
   Telescope (..),
   Substitution (..),
+  Constraint (..),
+  GuardedSubstSeg (..),
+  GuardedSubstitution (..),
+  PartialRenaming (..),
   Term (..),
 ) where
 
 import Otus.Ast.Id
 import Otus.Ast.Univ
 
+import qualified Data.IntMap as IM
+
 newtype Telescope = Tele [Term]
   deriving (Eq, Show)
 
 newtype Substitution = Subst [Term]
+  deriving (Eq, Show)
+
+data Constraint
+  = TyEq Telescope Term Term
+  | TmEq Telescope Term Term
+  deriving (Eq, Show)
+
+data GuardedSubstSeg
+  = Unsolved
+  | Solved Term [Constraint]
+  deriving (Eq, Show)
+
+newtype GuardedSubstitution = GSubst [GuardedSubstSeg]
+  deriving (Eq, Show)
+
+data PartialRenaming
+  = PRen
+  { domSize :: LevelId,
+    codSize :: LevelId,
+    renamingMap :: IM.IntMap LevelId
+  }
   deriving (Eq, Show)
 
 data Term
@@ -49,11 +76,11 @@ data Term
     Lift Term
   | Quote Term
   | Local Telescope Term
-  | Partial Telescope Substitution Term
+  | Guarded GuardedSubstitution Term
+  | Weaken PartialRenaming Term Term
   | Error
-  | ---- Γ |- p : Local Δ T   Γ Δ , T |- n B
+  | ---- Γ |- p : Local Δ T   Γ Δ , T |- n : Local Δ' B
     -----------------------------------------
-    ---- Γ |- let open p in n : Local Δ,T B
+    ---- Γ |- let open p in n : Local Δ,T,Δ' B
     LetOpen Term Term
-  | Unify Term Term
   deriving (Eq, Show)
