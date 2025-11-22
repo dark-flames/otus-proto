@@ -23,6 +23,7 @@ library
       Otus.Ast.Univ
       Otus.Common
       Otus.Common.Result
+      Otus.Common.Utils
       Otus.Normalize
       Otus.Normalize.Control
       Otus.Normalize.Env

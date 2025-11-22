@@ -3,13 +3,15 @@ module Otus.Normalize.Value (
   VTelescope (..),
   VSubstitution (..),
   VConstraint (..),
-  VGuardedSubstSeg (.., UnsolvedMeta, SolvedMeta),
-  VGuardedSubstitution (..),
+  VMetaDefinition (.., UnsolvedMeta, SolvedMeta),
+  metaView,
+  VSignature (..),
   Value (..),
   Neutral (..),
   neutralApp,
   freshVar,
   vVar,
+  maybeVar,
 ) where
 
 import Data.List.NonEmpty (NonEmpty, singleton, (<|))
@@ -31,26 +33,26 @@ data VConstraint
   | VTmEq VTelescope Neutral Neutral
   deriving (Eq, Show)
 
-data VGuardedSubstSeg
+data VMetaDefinition
   = VUnsolved
   | VSolved Value [VConstraint]
   deriving (Eq, Show)
 
-metaView :: VGuardedSubstSeg -> Maybe Value
+metaView :: VMetaDefinition -> Maybe Value
 metaView = \case
   VUnsolved -> Nothing
   VSolved val [] -> Just val
   VSolved _ (_ : _) -> Nothing
 
-pattern UnsolvedMeta :: VGuardedSubstSeg
+pattern UnsolvedMeta :: VMetaDefinition
 pattern UnsolvedMeta <- (metaView -> Nothing)
 
-pattern SolvedMeta :: Value -> VGuardedSubstSeg
+pattern SolvedMeta :: Value -> VMetaDefinition
 pattern SolvedMeta val <- (metaView -> Just val)
 
 {-# COMPLETE UnsolvedMeta, SolvedMeta #-}
 
-newtype VGuardedSubstitution = VGSubst [VGuardedSubstSeg]
+newtype VSignature = VSig [VMetaDefinition]
   deriving (Eq, Show)
 
 data Neutral
@@ -81,7 +83,7 @@ data Value
     VLift Value
   | VQuote Value
   | VLocal VTelescope Value
-  | VGuarded VGuardedSubstitution Value
+  | VGuarded VSignature Value
   | VError
   deriving (Eq, Show)
 
@@ -91,8 +93,8 @@ instance Semigroup VTelescope where
 instance Semigroup VSubstitution where
   (VSubst l) <> (VSubst r) = VSubst (l ++ r)
 
-instance Semigroup VGuardedSubstitution where
-  (VGSubst l) <> (VGSubst r) = VGSubst (l ++ r)
+instance Semigroup VSignature where
+  (VSig l) <> (VSig r) = VSig (l ++ r)
 
 neutralApp :: Neutral -> Value -> Neutral
 neutralApp n arg = case n of
@@ -104,3 +106,8 @@ freshVar env = VNeutral $ NVar $ LevelId $ ctxLength env
 
 vVar :: LevelId -> Value
 vVar = VNeutral . NVar
+
+maybeVar :: Value -> Maybe LevelId
+maybeVar = \case
+  VNeutral (NVar l) -> Just l
+  _ -> Nothing

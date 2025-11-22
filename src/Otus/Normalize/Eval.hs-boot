@@ -7,4 +7,4 @@ import Otus.Normalize.Control
 import Otus.Normalize.Env
 import Otus.Normalize.Value
 
-evaluate :: Environment -> Term -> EvalResult Value
+evaluate :: Term -> Environment -> EvalResult Value

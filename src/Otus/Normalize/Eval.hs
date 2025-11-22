@@ -6,12 +6,13 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Data.Foldable (foldlM)
 
 import Otus.Ast
+import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Env
 import Otus.Normalize.Value
 
-evaluate :: Environment -> Term -> EvalResult Value
-evaluate env tm = case tm of
+evaluate :: Term -> Environment -> EvalResult Value
+evaluate tm env = case tm of
   Var idx -> case find env idx of
     Just val -> return val
     Nothing -> throwError $ UnboundIndex idx
@@ -50,11 +51,11 @@ evaluate env tm = case tm of
     metaVal <- go metaTm
     return $ evalForce metaVal
   Dynamic tele ty -> do
-    teleVal <- evalTelescope env tele
+    teleVal <- evalTelescope tele env
     tyVal <- go ty
     return $ extendDynamic teleVal tyVal
   Ok subst res -> do
-    substVal <- evalSubstitution env subst
+    substVal <- evalSubstitution subst env
     resVal <- go res
     return $ extendOk substVal resVal
   TyErr -> return VTyErr
@@ -69,14 +70,14 @@ evaluate env tm = case tm of
     objVal <- go objTm
     return $ evalQuote objVal
   Local tele ty -> do
-    teleVal <- evalTelescope env tele
+    teleVal <- evalTelescope tele env
     tyVal <- go ty
     return $ extendLocal teleVal tyVal
-  Guarded gSubst res -> do
-    (gSubstVal, env') <- evalGuardSubst env gSubst
-    resVal <- evaluate env' res
+  Guarded sig res -> do
+    (env', vSig) <- evalSignature sig env
+    resVal <- evaluate res env'
     let
-      guardedVal = extendGuarded gSubstVal resVal
+      guardedVal = extendGuarded vSig resVal
     -- todo : solve
     return guardedVal
   -- Todo : Weakening
@@ -84,50 +85,34 @@ evaluate env tm = case tm of
   Error -> return VError
   _ -> undefined
   where
-    go = evaluate env
+    go tm' = evaluate tm' env
 
 -- evaluation of meta structures
 evalClosure :: Closure -> Value -> EvalResult Value
-evalClosure (Closure env tm) arg = evaluate (push env arg) tm
+evalClosure (Closure env tm) arg = evaluate tm (push arg env)
 
 evalClosure' :: Closure -> [Value] -> EvalResult Value
-evalClosure' (Closure env tm) args = evaluate (push' env args) tm
+evalClosure' (Closure env tm) args = evaluate tm (push' args env)
 
-evalTelescope :: Environment -> Telescope -> EvalResult VTelescope
-evalTelescope env (Tele tys) = VTele <$> go env tys
-  where
-    go e = \case
-      [] -> return []
-      ty : tele -> do
-        vTy <- evaluate e ty
-        vTele <- go (pushFreshVar e) tele
-        return (vTy : vTele)
+evalTelescope :: Telescope -> Environment -> EvalResult VTelescope
+evalTelescope (Tele tys) env = VTele . snd <$> lensIterM evaluate (const pushFreshVar) tys env
 
-evalSubstitution :: Environment -> Substitution -> EvalResult VSubstitution
-evalSubstitution env (Subst tms) = VSubst <$> mapM (evaluate env) tms
+evalSubstitution :: Substitution -> Environment -> EvalResult VSubstitution
+evalSubstitution (Subst tms) env = VSubst <$> mapM (`evaluate` env) tms
 
-evalConstraint :: Environment -> Constraint -> EvalResult VConstraint
+evalConstraint :: Constraint -> Environment -> EvalResult VConstraint
 evalConstraint = undefined
 
-evalGuardSeg :: Environment -> GuardedSubstSeg -> EvalResult VGuardedSubstSeg
-evalGuardSeg env = \case
+evalMetaDef :: MetaDefinition -> Environment -> EvalResult VMetaDefinition
+evalMetaDef def env = case def of
   Unsolved -> return VUnsolved
   (Solved tm constrs) -> do
-    val <- evaluate env tm
-    constrVals <- mapM (evalConstraint env) constrs
+    val <- evaluate tm env
+    constrVals <- mapM (`evalConstraint` env) constrs
     return (VSolved val constrVals)
 
-evalGuardSubst :: Environment -> GuardedSubstitution -> EvalResult (VGuardedSubstitution, Environment)
-evalGuardSubst env (GSubst gSubst) = case gSubst of
-  [] -> return (VGSubst [], env)
-  seg : segs -> do
-    vSeg <- evalGuardSeg env seg
-    let
-      e = case vSeg of
-        UnsolvedMeta -> pushFreshVar env
-        SolvedMeta val -> push env val
-    (VGSubst vSegs, e') <- evalGuardSubst e (GSubst segs)
-    return (VGSubst $ vSeg : vSegs, e')
+evalSignature :: Signature -> Environment -> EvalResult (Environment, VSignature)
+evalSignature (Sig sig) env = mapSnd VSig <$> lensIterM evalMetaDef pushMetaDef sig env
 
 -- currying of telescope
 extendDynamic :: VTelescope -> Value -> Value
@@ -146,16 +131,16 @@ extendLocal vTele = \case
   VLocal vTele' val -> VLocal (vTele <> vTele') val
   val -> VLocal vTele val
 
-extendGuarded :: VGuardedSubstitution -> Value -> Value
-extendGuarded vGuard = \case
-  VGuarded innerVGuard val -> VGuarded (vGuard <> innerVGuard) val
+extendGuarded :: VSignature -> Value -> Value
+extendGuarded vSig = \case
+  VGuarded innerVSig val -> VGuarded (vSig <> innerVSig) val
   VError -> VError
-  val -> VGuarded vGuard val
+  val -> VGuarded vSig val
 
 -- staging
 evalForce :: Value -> Value
 evalForce = \case
-  VGuarded vGuarded val -> case forceVGuardedSubst vGuarded of
+  VGuarded vSig val -> case forceVSignature vSig of
     Just vSubst -> VOk vSubst val
     Nothing -> VTyErr -- Should unsolved meta variables be allowed here?
   VError -> VTyErr
@@ -164,36 +149,29 @@ evalForce = \case
 
 evalLift :: Value -> Value
 evalLift = \case
-  VDynamic teleVal tyVal -> VLocal teleVal (evalLift tyVal)
-  tyVal -> VLift tyVal
+  VDynamic vTele vTy -> VLocal vTele (evalLift vTy)
+  vTy -> VLift vTy
 
 evalQuote :: Value -> Value
 evalQuote = \case
-  VOk substVal val -> extendGuarded (vSubstIntoGuarded substVal) (evalQuote val)
+  VOk vSubst val -> extendGuarded (quoteVSubst vSubst) (evalQuote val)
   VTyErr -> VError
   val -> VQuote val
 
-vSubstIntoGuarded :: VSubstitution -> VGuardedSubstitution
-vSubstIntoGuarded (VSubst vals) = VGSubst (map f vals)
+quoteVSubst :: VSubstitution -> VSignature
+quoteVSubst (VSubst vals) = VSig (map f vals)
   where
     f val = VSolved val []
 
-forceVGuardedSeg :: VGuardedSubstSeg -> Maybe Value
-forceVGuardedSeg = \case
+forceVMetaDef :: VMetaDefinition -> Maybe Value
+forceVMetaDef = \case
   VUnsolved -> Nothing
   VSolved val constraints
     | null constraints -> Just val
     | otherwise -> Nothing
 
-forceVGuardedSubst :: VGuardedSubstitution -> Maybe VSubstitution
-forceVGuardedSubst (VGSubst segs) = VSubst <$> go segs
-  where
-    go = \case
-      [] -> Just []
-      seg : rest -> do
-        val <- forceVGuardedSeg seg
-        vals <- go rest
-        return $ val : vals
+forceVSignature :: VSignature -> Maybe VSubstitution
+forceVSignature (VSig defs) = VSubst <$> mapM forceVMetaDef defs
 
 -- evaluation of eliminations
 evalApp :: Value -> Value -> EvalResult Value

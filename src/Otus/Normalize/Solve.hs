@@ -1,28 +1,19 @@
 module Otus.Normalize.Solve (
   Signature (..),
-  solveGuardedSubst,
+  solveSignature,
 ) where
 
 import Control.Monad (mapAndUnzipM, when)
-import Control.Monad.State (StateT)
 
 import Otus.Ast
+import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Value
 
-newtype Signature = Signature
-  { envLvl :: LevelId
-  }
-
-type SolveResult = StateT Signature EvalResult
-
-doAssignMeta :: LevelId -> Value -> SolveResult ()
-doAssignMeta = undefined
-
-solveConstraint :: VConstraint -> SolveResult ([VConstraint], Bool)
+solveConstraint :: VConstraint -> SolveMonad ([VConstraint], Bool)
 solveConstraint = undefined
 
-solveConstraints :: [VConstraint] -> SolveResult ([VConstraint], Bool)
+solveConstraints :: [VConstraint] -> SolveMonad ([VConstraint], Bool)
 solveConstraints constrs = do
   (simplified, solve) <- mapAndUnzipM solveConstraint constrs
   if or solve then do
@@ -31,8 +22,8 @@ solveConstraints constrs = do
   else
     return (concat simplified, False)
 
-solveGuardedSubstSeg :: LevelId -> VGuardedSubstSeg -> SolveResult (VGuardedSubstSeg, Bool)
-solveGuardedSubstSeg lvl = \case
+solveMetaDef :: LevelId -> VMetaDefinition -> SolveMonad (VMetaDefinition, Bool)
+solveMetaDef lvl = \case
   VUnsolved -> return (VUnsolved, False)
   VSolved val constrs
     | null constrs -> return (VSolved val constrs, False)
@@ -41,12 +32,10 @@ solveGuardedSubstSeg lvl = \case
         when (null simplified) $ doAssignMeta lvl val
         return (VSolved val simplified, solve)
 
-solveGuardedSubst :: LevelId -> VGuardedSubstitution -> SolveResult VGuardedSubstitution
-solveGuardedSubst (LevelId lvl) (VGSubst segs) = do
-  let
-    indexed = zipWith (\idx seg -> (LevelId $ lvl + idx, seg)) [0 ..] segs
-  (simplified, solve) <- mapAndUnzipM (uncurry solveGuardedSubstSeg) indexed
+solveSignature :: LevelId -> VSignature -> SolveMonad VSignature
+solveSignature (LevelId lvl) (VSig defs) = do
+  (simplified, solve) <- mapAndUnzipM (\(idx, def) -> solveMetaDef (LevelId $ lvl + idx) def) $ enumurate defs
   if or solve then do
-    solveGuardedSubst (LevelId lvl) (VGSubst simplified)
+    solveSignature (LevelId lvl) (VSig simplified)
   else
-    return $ VGSubst simplified
+    return $ VSig simplified

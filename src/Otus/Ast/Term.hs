@@ -2,8 +2,8 @@ module Otus.Ast.Term (
   Telescope (..),
   Substitution (..),
   Constraint (..),
-  GuardedSubstSeg (..),
-  GuardedSubstitution (..),
+  MetaDefinition (..),
+  Signature (..),
   PartialRenaming (..),
   Term (..),
 ) where
@@ -24,12 +24,12 @@ data Constraint
   | TmEq Telescope Term Term
   deriving (Eq, Show)
 
-data GuardedSubstSeg
+data MetaDefinition
   = Unsolved
   | Solved Term [Constraint]
   deriving (Eq, Show)
 
-newtype GuardedSubstitution = GSubst [GuardedSubstSeg]
+newtype Signature = Sig [MetaDefinition]
   deriving (Eq, Show)
 
 data PartialRenaming
@@ -76,7 +76,7 @@ data Term
     Lift Term
   | Quote Term
   | Local Telescope Term
-  | Guarded GuardedSubstitution Term
+  | Guarded Signature Term
   | Weaken PartialRenaming Term Term
   | Error
   | ---- Γ |- p : Local Δ T   Γ Δ , T |- n : Local Δ' B

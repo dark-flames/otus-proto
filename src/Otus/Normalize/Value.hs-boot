@@ -2,9 +2,11 @@ module Otus.Normalize.Value (
   Value,
   VTelescope (..),
   VConstraint,
-  VGuardedSubstSeg (..),
+  VMetaDefinition (..),
   vVar,
   freshVar,
+  maybeVar,
+  metaView,
 ) where
 
 import Otus.Ast
@@ -21,13 +23,13 @@ instance Show VConstraint
 
 instance Eq VConstraint
 
-data VGuardedSubstSeg
+data VMetaDefinition
   = VUnsolved
   | VSolved Value [VConstraint]
 
-instance Show VGuardedSubstSeg
+instance Show VMetaDefinition
 
-instance Eq VGuardedSubstSeg
+instance Eq VMetaDefinition
 
 data Value
 
@@ -37,3 +39,5 @@ instance Eq Value
 
 vVar :: LevelId -> Value
 freshVar :: (CtxLike e Value) => e -> Value
+maybeVar :: Value -> Maybe LevelId
+metaView :: VMetaDefinition -> Maybe Value
