@@ -22,7 +22,7 @@ metaViewIntoItem lvl = \case
   SolvedMeta val -> val
   UnsolvedMeta -> vVar lvl
 
-newtype Environment = Env (Seq.Seq Value)
+newtype Environment = Env ValueSeq
   deriving (Eq, Show)
 
 instance Sized Environment where
@@ -32,8 +32,8 @@ instance Sized Environment where
 push :: Value -> Environment -> Environment
 push val (Env e) = Env $ e Seq.|> val
 
-push' :: [Value] -> Environment -> Environment
-push' val (Env e) = Env $ e Seq.>< Seq.fromList val
+push' :: ValueSeq -> Environment -> Environment
+push' vals (Env e) = Env $ e Seq.>< vals
 
 find :: (CtxIndex id) => id -> Environment -> Maybe Value
 find idx (Env e) = e Seq.!? intoLevelInt e idx

@@ -7,7 +7,9 @@ module Otus.Normalize.Eval (
 
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.State.Strict (get, lift)
-import Data.Foldable (foldlM, foldrM)
+import Data.Foldable (foldlM)
+
+import qualified Data.Sequence as Seq
 
 import Otus.Ast
 import Otus.Common
@@ -43,8 +45,8 @@ evaluate tm env = case tm of
   -- Object
   Force metaTm -> go metaTm >>= evalForce
   Dynamic tele ty -> do
-    (teleVal, _) <- evalTelescope tele env
-    tyVal <- go ty
+    (teleVal, env') <- runEvalMonad (evalTelescope tele) env
+    tyVal <- evaluate ty env'
     return $ extendDynamic teleVal tyVal
   Ok subst res -> do
     substVal <- evalSubstitution subst env
@@ -56,7 +58,7 @@ evaluate tm env = case tm of
     evalDbind (Closure env next) prevVal
   -- Meta
   Local tele ty -> do
-    (teleVal, env') <- evalTelescope tele env
+    (teleVal, env') <- runEvalMonad (evalTelescope tele) env
     tyVal <- evaluate ty env'
     return $ VLocal teleVal tyVal
   Guarded sig inner -> do
@@ -76,11 +78,17 @@ evaluate tm env = case tm of
 evalClosure :: Value -> Closure -> EvalResult Value
 evalClosure arg (Closure env tm) = evaluate tm (push arg env)
 
-evalClosure' :: [Value] -> Closure -> EvalResult Value
+evalClosure' :: ValueSeq -> Closure -> EvalResult Value
 evalClosure' args (Closure env tm) = evaluate tm (push' args env)
 
-evalTelescope :: Telescope -> Environment -> EvalResult (VTelescope, Environment)
-evalTelescope (Tele tys) env = mapFst VTele <$> lensIterM evaluate (const pushFreshVar) tys env
+-- effect: push evaluated telesope to the environment
+evalTelescope :: Telescope -> EvalMonad VTelescope
+evalTelescope (Tele tys) = VTele <$> mapM go tys
+  where
+    go ty = do
+      vty <- doEvaluate ty
+      _ <- doPushFreshVar
+      return vty
 
 evalSubstitution :: Substitution -> Environment -> EvalResult VSubstitution
 evalSubstitution (Subst tms) env = VSubst <$> mapM (`evaluate` env) tms
@@ -91,11 +99,12 @@ evalConstraint constr env = case constr of
   TmEq tele lhs rhs -> uncurry3 VTmEq <$> evalTuple tele lhs rhs
   where
     evalTuple tele lhs rhs = do
-      (vTele, env') <- evalTelescope tele env
+      (vTele, env') <- runEvalMonad (evalTelescope tele) env
       vLhs <- evaluate lhs env'
       vRhs <- evaluate rhs env'
       return (vTele, vLhs, vRhs)
 
+-- effect: push evaluated meta def to the environment
 evalMetaDef :: Environment -> MetaDefinition -> EvalMonad VMetaDefinition
 evalMetaDef baseEnv def = case def of
   MUnsolved -> doPushFreshVar >> return VMUnsolved
@@ -109,6 +118,7 @@ evalMetaDef baseEnv def = case def of
     doPush val
     return $ VMSolved $ Closure baseEnv tm
 
+-- effect: push evaluated signature to the environment
 evalSignature :: Signature -> EvalMonad VSignature
 evalSignature (Sig defs) = do
   env <- get
@@ -137,15 +147,15 @@ evalForce = \case
   VNeutral neu -> return $ VNeutral $ NForce neu
   _ -> throwError ForceOnNonLocal
 
-forceVSignature :: VSignature -> EvalResult (Maybe [Value])
-forceVSignature (VSig defs) = foldrM f (return []) defs
+forceVSignature :: VSignature -> EvalResult (Maybe ValueSeq)
+forceVSignature (VSig defs) = foldlM f (Just Seq.Empty) defs
   where
-    f :: VMetaDefinition -> Maybe [Value] -> EvalResult (Maybe [Value])
-    f vDef = \case
+    f :: Maybe ValueSeq -> VMetaDefinition -> EvalResult (Maybe ValueSeq)
+    f res vDef = case res of
       Just args -> case vDef of
         VMSolved cls -> do
           val <- evalClosure' args cls
-          return $ Just (args ++ [val])
+          return $ Just (args Seq.:|> val)
         _ -> return Nothing
       Nothing -> return Nothing
 
@@ -156,7 +166,7 @@ evalApp fnVal argVal = case fnVal of
   VNeutral neutral -> returnNeutral $ neutralApp neutral argVal
   _ -> throwError AppOnNonLambda
 
-evalApp' :: Value -> [Value] -> EvalResult Value
+evalApp' :: Value -> ValueSeq -> EvalResult Value
 evalApp' = foldlM evalApp
 
 evalNatElim :: Value -> Value -> Value -> EvalResult Value
@@ -164,7 +174,7 @@ evalNatElim baseVal stepVal = \case
   VZero _ -> return baseVal
   VSucc prevVal -> do
     recResVal <- evalNatElim baseVal stepVal prevVal
-    evalApp' stepVal [prevVal, recResVal]
+    evalApp' stepVal $ Seq.fromList [prevVal, recResVal]
   VNeutral neutral -> returnNeutral $ NNatElim baseVal stepVal neutral
   _ -> throwError NatElimOnNonNat
 
@@ -172,7 +182,7 @@ evalDbind :: Closure -> Value -> EvalResult Value
 evalDbind nextCls = \case
   VOk (VSubst subst) prevVal -> do
     let
-      subst' = subst ++ [prevVal]
+      subst' = subst Seq.:|> prevVal
     res <- evalClosure' subst' nextCls
     return $ extendOk (VSubst subst') res
   VTyErr -> return VTyErr

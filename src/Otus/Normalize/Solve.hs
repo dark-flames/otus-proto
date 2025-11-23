@@ -6,7 +6,7 @@ import Control.Monad (when)
 import Control.Monad.State.Strict (StateT (runStateT), gets, modify)
 -- import {-# SOURCE #-} Otus.Normalize.Eval
 
-import Data.Foldable (Foldable (toList), foldlM)
+import Data.Foldable (foldlM)
 
 import qualified Data.Sequence as Seq
 
@@ -65,20 +65,20 @@ notConflict = \case
   _ -> True
 
 fromVSig :: LevelId -> VSignature -> Problem
-fromVSig lvl (VSig defs) = Problem lvl $ go lvl (Seq.fromList defs)
+fromVSig lvl (VSig defs) = Problem lvl $ go lvl defs
   where
     go _ Seq.Empty = Seq.Empty
     go l (def Seq.:<| rest) = case def of
       VMUnsolved -> MSUnknown l Seq.:<| go (incrLvl l) rest
-      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) (Seq.fromList constrs) Seq.:<| go (incrLvl l) rest
+      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs Seq.:<| go (incrLvl l) rest
       VMSolved cls -> MSSolved l (Unevaluated cls) Seq.:<| go (incrLvl l) rest
 
 toVSig :: Problem -> VSignature
-toVSig (Problem _ states) = VSig $ toList (f <$> states)
+toVSig (Problem _ states) = VSig $ f <$> states
   where
     f = \case
       MSUnknown _ -> VMUnsolved
-      MSGuarded _ cached constrs -> VMGuarded (asClosure cached) (toList constrs)
+      MSGuarded _ cached constrs -> VMGuarded (asClosure cached) constrs
       MSSolved _ cached -> VMSolved (asClosure cached)
 
 -- Control

@@ -10,4 +10,4 @@ import Otus.Normalize.Value
 
 doEvaluate :: Term -> EvalMonad Value
 evalClosure :: Value -> Closure -> EvalResult Value
-evalClosure' :: [Value] -> Closure -> EvalResult Value
+evalClosure' :: ValueSeq -> Closure -> EvalResult Value

@@ -6,17 +6,19 @@ module Otus.Ast.Term (
   Signature (..),
   PartialRenaming (..),
   Term (..),
+  TermSeq,
 ) where
 
 import qualified Data.IntMap as IM
+import qualified Data.Sequence as Seq
 
 import Otus.Ast.Id
 import Otus.Ast.Univ
 
-newtype Telescope = Tele [Term]
+newtype Telescope = Tele TermSeq
   deriving (Eq, Show)
 
-newtype Substitution = Subst [Term]
+newtype Substitution = Subst TermSeq
   deriving (Eq, Show)
 
 data Constraint
@@ -26,11 +28,11 @@ data Constraint
 
 data MetaDefinition
   = MUnsolved
-  | MGuarded Term [Constraint]
+  | MGuarded Term (Seq.Seq Constraint)
   | MSolved Term
   deriving (Eq, Show)
 
-newtype Signature = Sig [MetaDefinition]
+newtype Signature = Sig (Seq.Seq MetaDefinition)
   deriving (Eq, Show)
 
 data PartialRenaming
@@ -40,6 +42,8 @@ data PartialRenaming
     renamingMap :: IM.IntMap LevelId
   }
   deriving (Eq, Show)
+
+type TermSeq = Seq.Seq Term
 
 data Term
   = Var IndexId

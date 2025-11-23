@@ -7,12 +7,15 @@ module Otus.Normalize.Value (
   VMetaView (..),
   VSignature (..),
   Value (..),
+  ValueSeq,
   Neutral (..),
   vVar,
   neutralApp,
 ) where
 
 import Data.List.NonEmpty (NonEmpty, singleton, (<|))
+
+import qualified Data.Sequence as Seq
 
 import Otus.Ast
 import Otus.Common
@@ -22,21 +25,21 @@ data Closure = Closure Environment Term
   deriving (Eq, Show)
 
 -- telescope
-newtype VTelescope = VTele [Value]
+newtype VTelescope = VTele ValueSeq
   deriving (Eq, Show)
 
 instance Semigroup VTelescope where
-  (VTele l) <> (VTele r) = VTele (l ++ r)
+  (VTele l) <> (VTele r) = VTele (l Seq.>< r)
 
 instance Sized VTelescope where
   size (VTele l) = length l
 
 -- substitution
-newtype VSubstitution = VSubst [Value]
+newtype VSubstitution = VSubst ValueSeq
   deriving (Eq, Show)
 
 instance Semigroup VSubstitution where
-  (VSubst l) <> (VSubst r) = VSubst (l ++ r)
+  (VSubst l) <> (VSubst r) = VSubst (l Seq.>< r)
 
 instance Sized VSubstitution where
   size (VSubst l) = length l
@@ -50,7 +53,7 @@ data VConstraint
 -- meta definition
 data VMetaDefinition
   = VMUnsolved
-  | VMGuarded Closure [VConstraint]
+  | VMGuarded Closure (Seq.Seq VConstraint)
   | VMSolved Closure
   deriving (Eq, Show)
 
@@ -60,11 +63,11 @@ data VMetaView
   deriving (Eq, Show)
 
 -- signature
-newtype VSignature = VSig [VMetaDefinition]
+newtype VSignature = VSig (Seq.Seq VMetaDefinition)
   deriving (Eq, Show)
 
 instance Semigroup VSignature where
-  (VSig l) <> (VSig r) = VSig (l ++ r)
+  (VSig l) <> (VSig r) = VSig (l Seq.>< r)
 
 instance Sized VSignature where
   size (VSig l) = length l
@@ -79,6 +82,8 @@ data Neutral
   deriving (Eq, Show)
 
 -- value
+type ValueSeq = Seq.Seq Value
+
 data Value
   = VNeutral Neutral
   | VPi Value Closure
