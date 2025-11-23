@@ -1,6 +1,7 @@
 module Otus.Normalize.Control (
   EvalError (..),
   EvalResult,
+  EvalResultT,
   EvalMonad,
   doPush,
   doPushMetaView,
@@ -36,6 +37,8 @@ data EvalError
   deriving (Eq, Show)
 
 type EvalResult = Result EvalError
+
+type EvalResultT = ResultT EvalError
 
 type EvalMonad = StateT Environment EvalResult
 

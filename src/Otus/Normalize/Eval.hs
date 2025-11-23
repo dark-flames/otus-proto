@@ -60,12 +60,13 @@ evaluate tm env = case tm of
     tyVal <- evaluate ty env'
     return $ VLocal teleVal tyVal
   Guarded sig inner -> do
-    (vSig, _) <- runEvalMonad (evalSignature sig) env
-    (vSig', _) <- runEvalMonad (solveSignature vSig) env
-
-    return $ VGuarded vSig' (Closure env inner)
-  -- Todo : Weakening
-  -- Todo : LetOpen
+    vSig <- evalEvalMonad (evalSignature sig) env
+    res <- solveSignature (envLevel env) vSig
+    case res of
+      Just vSig' -> return $ VGuarded vSig' (Closure env inner)
+      _ -> return VError -- conflict
+      -- Todo : Weakening
+      -- Todo : LetOpen
   Error -> return VError
   _ -> undefined
   where
