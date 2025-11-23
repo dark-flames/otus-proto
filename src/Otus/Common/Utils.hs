@@ -3,6 +3,7 @@ module Otus.Common.Utils (
   mapTuple,
   mapFst,
   mapSnd,
+  uncurry3,
 ) where
 
 enumurate :: [a] -> [(Int, a)]
@@ -16,3 +17,6 @@ mapFst f = mapTuple f id
 
 mapSnd :: (b -> d) -> (a, b) -> (a, d)
 mapSnd = mapTuple id
+
+uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
+uncurry3 f (a, b, c) = f a b c

@@ -22,6 +22,7 @@ library
       Otus.Ast.Term
       Otus.Ast.Univ
       Otus.Common
+      Otus.Common.Iter
       Otus.Common.Result
       Otus.Common.Utils
       Otus.Normalize

@@ -1,19 +1,19 @@
 module Otus.Normalize.Solve (
-  Signature (..),
   solveSignature,
 ) where
 
-import Control.Monad (mapAndUnzipM, when)
+import Control.Monad (mapAndUnzipM)
+import Control.Monad.State.Strict (lift)
 
 import Otus.Ast
-import Otus.Common
 import Otus.Normalize.Control
+import {-# SOURCE #-} Otus.Normalize.Eval
 import Otus.Normalize.Value
 
-solveConstraint :: VConstraint -> SolveMonad ([VConstraint], Bool)
+solveConstraint :: VConstraint -> EvalMonad ([VConstraint], Bool)
 solveConstraint = undefined
 
-solveConstraints :: [VConstraint] -> SolveMonad ([VConstraint], Bool)
+solveConstraints :: [VConstraint] -> EvalMonad ([VConstraint], Bool)
 solveConstraints constrs = do
   (simplified, solve) <- mapAndUnzipM solveConstraint constrs
   if or solve then do
@@ -22,20 +22,30 @@ solveConstraints constrs = do
   else
     return (concat simplified, False)
 
-solveMetaDef :: LevelId -> VMetaDefinition -> SolveMonad (VMetaDefinition, Bool)
-solveMetaDef lvl = \case
-  VUnsolved -> return (VUnsolved, False)
-  VSolved val constrs
-    | null constrs -> return (VSolved val constrs, False)
-    | otherwise -> do
-        (simplified, solve) <- solveConstraints constrs
-        when (null simplified) $ doAssignMeta lvl val
-        return (VSolved val simplified, solve)
+solveMetaDef :: LevelId -> VMetaDefinition -> EvalMonad (VMetaDefinition, Bool)
+solveMetaDef bound = \case
+  VMUnsolved -> return (VMUnsolved, False)
+  VMGuarded cls constrs -> do
+    (simplified, solve) <- solveConstraints constrs
+    if null simplified then do
+      args <- doCollectArgs bound
+      val <- lift $ evalClosure' args cls
+      doPushMetaView $ SolvedMeta val
+      return (VMSolved cls, True)
+    else
+      return (VMGuarded cls simplified, solve)
+  VMSolved cls -> do
+    args <- doCollectArgs bound
+    val <- lift $ evalClosure' args cls
+    doPushMetaView $ SolvedMeta val
+    return (VMSolved cls, False)
 
-solveSignature :: LevelId -> VSignature -> SolveMonad VSignature
-solveSignature (LevelId lvl) (VSig defs) = do
-  (simplified, solve) <- mapAndUnzipM (\(idx, def) -> solveMetaDef (LevelId $ lvl + idx) def) $ enumurate defs
+solveSignature :: VSignature -> EvalMonad VSignature
+solveSignature (VSig defs) = do
+  bound <- doGetEnvLevel
+  (simplified, solve) <- mapAndUnzipM (solveMetaDef bound) defs
+  -- run until nothing solved : to be optimized
   if or solve then do
-    solveSignature (LevelId lvl) (VSig simplified)
+    solveSignature (VSig simplified)
   else
     return $ VSig simplified

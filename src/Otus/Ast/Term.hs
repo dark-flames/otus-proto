@@ -25,8 +25,9 @@ data Constraint
   deriving (Eq, Show)
 
 data MetaDefinition
-  = Unsolved
-  | Solved Term [Constraint]
+  = MUnsolved
+  | MGuarded Term [Constraint]
+  | MSolved Term
   deriving (Eq, Show)
 
 newtype Signature = Sig [MetaDefinition]
@@ -55,15 +56,6 @@ data Term
     ---- → ((n : Nat) → (P n) → P (1 + n))
     ---- → (m : Nat) → P m
     NatElim Term Term Term
-  | -- Identity type
-    Id Term Term Term
-  | Refl
-  | ---- J : {A : Set} {x : A}
-    ---- → (P : (y : A) → x ≡ y → Set)
-    ---- → P x refl
-    ---- → {y : A} (p : x ≡ y)
-    ---- → P y p
-    J Term Term Term
   | -- Universe
     Type Stage Universe
   | -- Object
@@ -73,9 +65,7 @@ data Term
   | DBind Term Term
   | Force Term
   | -- Meta
-    Lift Term
-  | Quote Term
-  | Local Telescope Term
+    Local Telescope Term
   | Guarded Signature Term
   | Weaken PartialRenaming Term Term
   | Error

@@ -1,101 +1,138 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Otus.Normalize.Env (
+  EnvItem (..),
+  itemView,
+  metaViewIntoItem,
   Environment (..),
   push,
   push',
+  pushVSubst,
+  envLevel,
   pushFreshVar,
-  pushMetaDef,
-  lensIterM,
-  MetaEnv (..),
-  VarKind (..),
-  varKind,
-  assignMeta,
-  lookupMeta,
+  pushFreshVar',
+  pushMetaView,
+  pushMetaView',
   updateMeta,
+  assignSolvedMeta,
+  find,
+  findMeta,
+  findSolvedMeta,
+  collectArgs,
+  lensIterM,
 ) where
 
-import Data.Maybe (fromMaybe)
+import Data.Foldable (Foldable (toList))
 
 import qualified Data.Sequence as Seq
 
-import Otus.Ast
-import {-# SOURCE #-} Otus.Normalize.Value
+import Otus.Ast.Id (CtxIndex (intoLevel, intoLevelInt), LevelId (..))
+import Otus.Common
+import Otus.Normalize.Value
 
-newtype Environment = Env (Seq.Seq Value)
+data EnvItem
+  = EVal Value
+  | EUnsolvedMeta LevelId
+  | ESolvedMeta Value
   deriving (Eq, Show)
 
-instance Contextual Environment where
-  ctxLength (Env vals) = length vals
+metaViewIntoItem :: LevelId -> VMetaView -> EnvItem
+metaViewIntoItem lvl = \case
+  SolvedMeta val -> ESolvedMeta val
+  UnsolvedMeta -> EUnsolvedMeta lvl
 
-instance CtxLike Environment Value where
-  findByLevel :: Environment -> Int -> Maybe Value
-  findByLevel (Env vals) i = vals Seq.!? i
+itemView :: EnvItem -> Value
+itemView = \case
+  EVal val -> val
+  ESolvedMeta val -> val
+  EUnsolvedMeta lvl -> vVar lvl
+
+newtype Environment = Env (Seq.Seq EnvItem)
+  deriving (Eq, Show)
+
+instance Sized Environment where
+  size (Env vals) = length vals
+
+-- raw operations
+pushRaw :: EnvItem -> Environment -> Environment
+pushRaw item (Env e) = Env $ e Seq.|> item
+
+pushRaw' :: [EnvItem] -> Environment -> Environment
+pushRaw' items (Env e) = Env $ e Seq.>< Seq.fromList items
+
+assignRaw :: (CtxIndex id) => id -> EnvItem -> Environment -> Environment
+assignRaw idx item (Env e) = Env $ Seq.update (intoLevelInt e idx) item e
+
+lookupRaw :: (CtxIndex id) => id -> Environment -> Maybe EnvItem
+lookupRaw idx (Env e) = e Seq.!? intoLevelInt e idx
+
+-- basic operations
+envLevel :: Environment -> LevelId
+envLevel = LevelId . size
 
 push :: Value -> Environment -> Environment
-push val (Env e) = Env $ e Seq.|> val
+push = pushRaw . EVal
 
 push' :: [Value] -> Environment -> Environment
-push' vals (Env e) = Env $ e Seq.>< Seq.fromList vals
+push' = pushRaw' . map EVal
+
+pushVSubst :: VSubstitution -> Environment -> Environment
+pushVSubst (VSubst vals) = push' vals
 
 pushFreshVar :: Environment -> Environment
-pushFreshVar env = push (freshVar env) env
+pushFreshVar env = push (vVar $ LevelId (size env)) env
 
-pushMetaDef :: VMetaDefinition -> Environment -> Environment
-pushMetaDef def = maybe id push $ metaView def
+pushFreshVar' :: Environment -> (Value, Environment)
+pushFreshVar' env =
+  let
+    val = (vVar $ LevelId (size env))
+  in
+    (val, push val env)
 
+pushMetaView :: VMetaView -> Environment -> Environment
+pushMetaView view env = pushRaw (metaViewIntoItem (envLevel env) view) env
+
+pushMetaView' :: VMetaView -> Environment -> (Value, Environment)
+pushMetaView' view env =
+  let
+    val = metaViewIntoItem (envLevel env) view
+  in
+    (itemView val, pushRaw val env)
+
+updateMeta :: (CtxIndex id) => id -> VMetaView -> Environment -> Environment
+updateMeta idx view env = assignRaw idx (metaViewIntoItem (intoLevel env idx) view) env
+
+assignSolvedMeta :: (CtxIndex id) => id -> Value -> Environment -> Environment
+assignSolvedMeta idx val = assignRaw idx (ESolvedMeta val)
+
+find :: (CtxIndex id) => id -> Environment -> Maybe Value
+find idx env = itemView <$> lookupRaw idx env
+
+findMeta :: (CtxIndex id) => id -> Environment -> Maybe VMetaView
+findMeta idx env = case lookupRaw idx env of
+  Just (ESolvedMeta val) -> Just $ SolvedMeta val
+  Just (EUnsolvedMeta _) -> Just UnsolvedMeta
+  _ -> Nothing
+
+findSolvedMeta :: (CtxIndex id) => id -> Environment -> Maybe Value
+findSolvedMeta idx env = case lookupRaw idx env of
+  Just (ESolvedMeta val) -> Just val
+  _ -> Nothing
+
+collectArgs :: (CtxIndex id) => id -> Environment -> [Value]
+collectArgs idx (Env e) = maybe [] (toList . fmap itemView) $ Seq.tails e Seq.!? intoLevelInt e idx
+
+-- iteration
 lensIterM
   :: (Monad m)
   => (item -> Environment -> m r)
   -> (r -> Environment -> Environment)
   -> [item]
   -> Environment
-  -> m (Environment, [r])
+  -> m ([r], Environment)
 lensIterM process updateEnv input env = case input of
-  [] -> return (env, [])
+  [] -> return ([], env)
   x : xs -> do
     res <- process x env
-    (env', rest) <- go xs $ updateEnv res env
-    return (env', res : rest)
+    (rest, env') <- go xs $ updateEnv res env
+    return (res : rest, env')
   where
     go = lensIterM process updateEnv
-
-data MetaEnv = MetaEnv
-  { envLvl :: LevelId,
-    metaDefs :: Seq.Seq (Maybe Value)
-  }
-  deriving (Eq, Show)
-
-data VarKind
-  = EnvVar
-  | MetaVar
-  | LocalVar
-  | NonVar
-
-varKind :: Value -> MetaEnv -> VarKind
-varKind val (MetaEnv envL defs) = case maybeVar val of
-  Just lvl
-    | lvl < envL -> EnvVar
-    | envL <= lvl && lvl < shift (length defs) envL -> MetaVar
-    | otherwise -> LocalVar
-  _ -> NonVar
-
-assignMeta :: LevelId -> Value -> MetaEnv -> MetaEnv
-assignMeta lvl val (MetaEnv envL defs) =
-  let
-    defId = sub lvl envL
-  in
-    MetaEnv
-      { envLvl = envL,
-        metaDefs = Seq.update defId (Just val) defs
-      }
-
-lookupMeta :: LevelId -> MetaEnv -> Maybe Value
-lookupMeta lvl (MetaEnv envL defs) =
-  let
-    defId = sub lvl envL
-  in
-    fromMaybe Nothing $ defs Seq.!? defId
-
-updateMeta :: LevelId -> VMetaDefinition -> MetaEnv -> MetaEnv
-updateMeta lvl def = maybe id (assignMeta lvl) $ metaView def

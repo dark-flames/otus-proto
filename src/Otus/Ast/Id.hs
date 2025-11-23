@@ -1,10 +1,11 @@
 module Otus.Ast.Id (
   IndexId (..),
   LevelId (..),
-  Contextual (..),
-  CtxLike (..),
   CtxIndex (..),
+  incrLvl,
 ) where
+
+import Otus.Common.Iter
 
 newtype IndexId = IndexId Int
   deriving (Eq, Ord, Show)
@@ -12,30 +13,29 @@ newtype IndexId = IndexId Int
 newtype LevelId = LevelId Int
   deriving (Eq, Ord, Show)
 
-class Contextual a where
-  ctxLength :: a -> Int
-
-class (Contextual a) => CtxLike a e where
-  findByLevel :: a -> Int -> Maybe e
-
 class CtxIndex id where
   shift :: Int -> id -> id
   sub :: id -> id -> Int
-  find :: (CtxLike a e) => a -> id -> Maybe e
-  intoLevel :: (Contextual a) => a -> id -> LevelId
-  intoIndex :: (Contextual a) => a -> id -> IndexId
+  intoLevelInt :: (Sized a) => a -> id -> Int
+  intoIndexInt :: (Sized a) => a -> id -> Int
+
+  intoLevel :: (Sized a) => a -> id -> LevelId
+  intoLevel e i = LevelId $ intoLevelInt e i
+
+  intoIndex :: (Sized a) => a -> id -> IndexId
+  intoIndex e i = IndexId $ intoIndexInt e i
 
 instance CtxIndex IndexId where
   shift s (IndexId i) = IndexId $ i + s
   sub (IndexId i) (IndexId j) = j - i
-  find ctx index = find ctx (intoLevel ctx index)
-
-  intoLevel ctx (IndexId i) = LevelId $ ctxLength ctx - i - 1
-  intoIndex _ (IndexId i) = IndexId i
+  intoLevelInt ctx (IndexId i) = size ctx - i - 1
+  intoIndexInt _ (IndexId i) = i
 
 instance CtxIndex LevelId where
   shift s (LevelId i) = LevelId $ i + s
   sub (LevelId i) (LevelId j) = i - j
-  find ctx (LevelId levelId) = findByLevel ctx levelId
-  intoLevel _ (LevelId i) = LevelId i
-  intoIndex ctx (LevelId i) = IndexId $ ctxLength ctx - i - 1
+  intoLevelInt _ (LevelId i) = i
+  intoIndexInt ctx (LevelId i) = size ctx - i - 1
+
+incrLvl :: LevelId -> LevelId
+incrLvl = shift 1
