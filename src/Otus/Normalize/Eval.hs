@@ -98,15 +98,15 @@ evalConstraint constr env = case constr of
 
 evalMetaDef :: Environment -> MetaDefinition -> EvalMonad VMetaDefinition
 evalMetaDef baseEnv def = case def of
-  MUnsolved -> doPushMetaView UnsolvedMeta >> return VMUnsolved
+  MUnsolved -> doPushFreshVar >> return VMUnsolved
   MGuarded tm constrs -> do
-    doPushMetaView UnsolvedMeta
     env <- get
     constrVals <- lift $ mapM (`evalConstraint` env) constrs
+    _ <- doPushFreshVar
     return (VMGuarded (Closure baseEnv tm) constrVals)
   MSolved tm -> do
     val <- doEvaluate tm
-    doPushMetaView $ SolvedMeta val
+    doPush val
     return $ VMSolved $ Closure baseEnv tm
 
 evalSignature :: Signature -> EvalMonad VSignature

@@ -4,14 +4,10 @@ module Otus.Normalize.Control (
   EvalResultT,
   EvalMonad,
   doPush,
-  doPushMetaView,
+  doPushFreshVar,
   doFind,
-  doAssignSolvedMeta,
-  doFindSolvedMeta,
   doGetEnvLevel,
-  doCollectArgs,
   returnAndPush,
-  returnAndPushMetaView,
   returnNeutral,
   runEvalMonad,
   evalEvalMonad,
@@ -48,29 +44,17 @@ doPush val = modify (push val)
 returnAndPush :: Value -> EvalMonad Value
 returnAndPush val = doPush val >> return val
 
-doPushMetaView :: VMetaView -> EvalMonad ()
-doPushMetaView view = modify $ pushMetaView view
-
-returnAndPushMetaView :: VMetaView -> EvalMonad Value
-returnAndPushMetaView view = do
-  (val, env) <- gets $ pushMetaView' view
+doPushFreshVar :: EvalMonad Value
+doPushFreshVar = do
+  (val, env) <- gets pushFreshVar'
   put env
   return val
 
 doFind :: (CtxIndex id) => id -> EvalMonad (Maybe Value)
 doFind idx = gets $ find idx
 
-doAssignSolvedMeta :: (CtxIndex id) => id -> Value -> EvalMonad ()
-doAssignSolvedMeta idx val = modify $ assignSolvedMeta idx val
-
-doFindSolvedMeta :: (CtxIndex id) => id -> EvalMonad (Maybe Value)
-doFindSolvedMeta idx = gets $ findSolvedMeta idx
-
 doGetEnvLevel :: EvalMonad LevelId
 doGetEnvLevel = gets envLevel
-
-doCollectArgs :: LevelId -> EvalMonad [Value]
-doCollectArgs = gets . collectArgs
 
 returnNeutral :: Neutral -> EvalResult Value
 returnNeutral = return . VNeutral

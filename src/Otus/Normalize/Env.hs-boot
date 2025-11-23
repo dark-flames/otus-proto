@@ -1,17 +1,12 @@
 module Otus.Normalize.Env (
-  EnvItem,
   Environment (..),
 ) where
 
 import qualified Data.Sequence as Seq
 
-data EnvItem
+import {-# SOURCE #-} Otus.Normalize.Value
 
-instance Show EnvItem
-
-instance Eq EnvItem
-
-newtype Environment = Env (Seq.Seq EnvItem)
+newtype Environment = Env (Seq.Seq Value)
 
 instance Show Environment
 
