@@ -3,9 +3,7 @@ module Otus.Normalize.Solve (
 ) where
 
 import Control.Monad (when)
-import Control.Monad.State.Strict (StateT (runStateT), gets, modify)
--- import {-# SOURCE #-} Otus.Normalize.Eval
-
+import Control.Monad.State.Strict (MonadTrans (lift), StateT (runStateT), gets, modify)
 import Data.Foldable (foldlM)
 
 import qualified Data.Sequence as Seq
@@ -13,6 +11,7 @@ import qualified Data.Sequence as Seq
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
+import {-# SOURCE #-} Otus.Normalize.Eval
 import Otus.Normalize.Value
 
 data CachedClosure
@@ -154,9 +153,23 @@ solveConstraintsOnce = foldlM go (Seq.Empty, NoModification)
         return (simplified Seq.:|> constr, res)
 
 solveConstraint :: VConstraint -> SolveMonad (Seq.Seq VConstraint, SolveResult)
-solveConstraint (VTmEq vtele lhs rhs) = solveTmEq vtele (lhs, rhs)
+solveConstraint (VTmEq vTele lhs rhs vTy) = solveTmEq vTele (lhs, rhs) vTy
 solveConstraint _ = undefined
 
-solveTmEq :: VTelescope -> (Value, Value) -> SolveMonad (Seq.Seq VConstraint, SolveResult)
-solveTmEq _vtele = \case
-  _ -> undefined
+solveTmEq :: VTelescope -> (Value, Value) -> Value -> SolveMonad (Seq.Seq VConstraint, SolveResult)
+solveTmEq vTele (lhs, rhs) = \case
+  VPi vDom codCls -> do
+    (vCod, arg) <- doEvalClsFresh codCls
+    vLhs <- doEvalApp lhs arg
+    vRhs <- doEvalApp rhs arg
+    let
+      vTele' = vTele |> vDom
+    solveTmEq vTele' (vLhs, vRhs) vCod
+  vty -> return (Seq.singleton $ VTmEq vTele lhs rhs vty, Conflict)
+
+-- evaluate
+doEvalClsFresh :: Closure -> SolveMonad (Value, Value)
+doEvalClsFresh cls = lift $ evalClosureFresh cls
+
+doEvalApp :: Value -> Value -> SolveMonad Value
+doEvalApp fun arg = lift $ evalApp fun arg

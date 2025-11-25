@@ -2,9 +2,12 @@ module Otus.Normalize.Eval (
   evaluate,
   evalClosure,
   evalClosure',
-  doEvaluate,
+  evalClosureFresh,
+  evalClosureFreshN,
+  evalApp,
 ) where
 
+import Control.Exception (assert)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.State.Strict (get, lift)
 import Data.Foldable (foldlM)
@@ -20,7 +23,7 @@ import Otus.Normalize.Value
 
 evaluate :: Term -> Environment -> EvalResult Value
 evaluate tm env = case tm of
-  Var idx -> case find idx env of
+  Var idx -> case env @? idx of
     Just val -> return val
     Nothing -> throwError $ UnboundIndex idx
   Pi domain codomain -> do
@@ -47,11 +50,11 @@ evaluate tm env = case tm of
   Dynamic tele ty -> do
     (teleVal, env') <- runEvalMonad (evalTelescope tele) env
     tyVal <- evaluate ty env'
-    return $ extendDynamic teleVal tyVal
+    return $ VDynamic teleVal tyVal
   Ok subst res -> do
     substVal <- evalSubstitution subst env
     resVal <- go res
-    return $ extendOk substVal resVal
+    return $ VOk substVal resVal
   TyErr -> return VTyErr
   DBind prev next -> do
     prevVal <- go prev
@@ -92,6 +95,20 @@ evalClosure arg (Closure env tm) = evaluate tm (push arg env)
 evalClosure' :: ValueSeq -> Closure -> EvalResult Value
 evalClosure' args (Closure env tm) = evaluate tm (push' args env)
 
+evalClosureFresh :: Closure -> EvalResult (Value, Value)
+evalClosureFresh (Closure env tm) = do
+  let
+    (arg, env') = pushFreshVar' env
+  res <- evaluate tm env'
+  return (res, arg)
+
+evalClosureFreshN :: Int -> Closure -> EvalResult (Value, ValueSeq)
+evalClosureFreshN n (Closure env tm) = do
+  let
+    (args, env') = pushFreshVarN' n env
+  res <- evaluate tm env'
+  return (res, args)
+
 -- effect: push evaluated telesope to the environment
 evalTelescope :: Telescope -> EvalMonad VTelescope
 evalTelescope (Tele tys) = VTele <$> mapM go tys
@@ -106,14 +123,17 @@ evalSubstitution (Subst tms) env = VSubst <$> mapM (`evaluate` env) tms
 
 evalConstraint :: Constraint -> Environment -> EvalResult VConstraint
 evalConstraint constr env = case constr of
-  TyEq tele lhs rhs -> uncurry3 VTyEq <$> evalTuple tele lhs rhs
-  TmEq tele lhs rhs -> uncurry3 VTmEq <$> evalTuple tele lhs rhs
-  where
-    evalTuple tele lhs rhs = do
-      (vTele, env') <- runEvalMonad (evalTelescope tele) env
-      vLhs <- evaluate lhs env'
-      vRhs <- evaluate rhs env'
-      return (vTele, vLhs, vRhs)
+  TyEq tele lhs rhs -> do
+    (vTele, env') <- runEvalMonad (evalTelescope tele) env
+    vLhs <- evaluate lhs env'
+    vRhs <- evaluate rhs env'
+    return $ VTyEq vTele vLhs vRhs
+  TmEq tele lhs rhs ty -> do
+    (vTele, env') <- runEvalMonad (evalTelescope tele) env
+    vLhs <- evaluate lhs env'
+    vRhs <- evaluate rhs env'
+    vTy <- evaluate ty env'
+    return $ VTmEq vTele vLhs vRhs vTy
 
 -- effect: push evaluated meta def to the environment
 evalMetaDef :: Environment -> MetaDefinition -> EvalMonad VMetaDefinition
@@ -134,18 +154,6 @@ evalSignature :: Signature -> EvalMonad VSignature
 evalSignature (Sig defs) = do
   env <- get
   VSig <$> mapM (evalMetaDef env) defs
-
--- currying of telescope
-extendDynamic :: VTelescope -> Value -> Value
-extendDynamic vTele = \case
-  VDynamic vTele' val -> extendDynamic (vTele <> vTele') val
-  val -> VDynamic vTele val
-
-extendOk :: VSubstitution -> Value -> Value
-extendOk vSubst = \case
-  VOk vSubst' val -> extendOk (vSubst <> vSubst') val
-  VTyErr -> VTyErr
-  val -> VOk vSubst val
 
 -- staging
 evalForce :: LevelId -> Value -> EvalResult Value
@@ -172,7 +180,7 @@ forceVSignature (VSig defs) = foldlM f (Just Seq.Empty) defs
       Just args -> case vDef of
         VMSolved cls -> do
           val <- evalClosure' args cls
-          return $ Just (args Seq.:|> val)
+          return $ Just (args |> val)
         _ -> return Nothing
       Nothing -> return Nothing
 
@@ -199,17 +207,19 @@ evalDbind :: Value -> Closure -> EvalResult Value
 evalDbind val nextCls = case val of
   VOk (VSubst subst) prevVal -> do
     let
-      subst' = subst Seq.:|> prevVal
+      subst' = subst |> prevVal
     res <- evalClosure' subst' nextCls
-    return $ extendOk (VSubst subst') res
+    return $ VOk (VSubst subst') res
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NDBind neutral nextCls
   _ -> throwError DBindOnNonDynamic
 
 evalAssign :: Int -> VSignature -> Value -> EvalResult Value
 evalAssign n vsig = \case
-  -- assert n + |vsig| = _m ()
-  VGuarded _m vsig' inner -> return $ VGuarded n (vsig <> vsig') inner
+  VGuarded m vsig' inner ->
+    assert (n + size vsig' == m) $ -- by typing
+      return $
+        VGuarded n (vsig <> vsig') inner
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NAssign n vsig neutral
   _ -> throwError AssignOnNonLocal
@@ -218,7 +228,7 @@ evalOpen :: Value -> Value -> EvalResult Value
 evalOpen vPrev vNext = case vPrev of
   VGuarded n (VSig defs) prevInnerCls ->
     let
-      vSig = VSig $ defs Seq.|> VMSolved prevInnerCls
+      vSig = VSig $ defs |> VMSolved prevInnerCls
     in
       evalAssign n vSig vNext
   VTyErr -> return VTyErr

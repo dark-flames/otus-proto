@@ -13,8 +13,6 @@ module Otus.Normalize.Value (
   neutralApp,
 ) where
 
-import Data.List.NonEmpty (NonEmpty, singleton, (<|))
-
 import qualified Data.Sequence as Seq
 
 import Otus.Ast
@@ -28,26 +26,38 @@ data Closure = Closure Environment Term
 newtype VTelescope = VTele ValueSeq
   deriving (Eq, Show)
 
-instance Semigroup VTelescope where
-  (VTele l) <> (VTele r) = VTele (l Seq.>< r)
-
 instance Sized VTelescope where
   size (VTele l) = length l
+
+instance AppendL VTelescope Value where
+  val <| (VTele l) = VTele (val <| l)
+
+instance AppendR VTelescope Value where
+  (VTele l) |> val = VTele (l |> val)
+
+instance Extend VTelescope VTelescope where
+  (VTele l) >< (VTele r) = VTele (l >< r)
 
 -- substitution
 newtype VSubstitution = VSubst ValueSeq
   deriving (Eq, Show)
 
-instance Semigroup VSubstitution where
-  (VSubst l) <> (VSubst r) = VSubst (l Seq.>< r)
-
 instance Sized VSubstitution where
   size (VSubst l) = length l
+
+instance AppendL VSubstitution Value where
+  val <| (VSubst l) = VSubst (val <| l)
+
+instance AppendR VSubstitution Value where
+  (VSubst l) |> val = VSubst (l |> val)
+
+instance Extend VSubstitution VSubstitution where
+  (VSubst l) >< (VSubst r) = VSubst (l >< r)
 
 -- constraint
 data VConstraint
   = VTyEq VTelescope Value Value
-  | VTmEq VTelescope Value Value
+  | VTmEq VTelescope Value Value Value
   deriving (Eq, Show)
 
 -- meta definition
@@ -66,16 +76,19 @@ data VMetaView
 newtype VSignature = VSig (Seq.Seq VMetaDefinition)
   deriving (Eq, Show)
 
-instance Semigroup VSignature where
-  (VSig l) <> (VSig r) = VSig (l Seq.>< r)
-
 instance Sized VSignature where
   size (VSig l) = length l
+
+instance Semigroup VSignature where
+  (VSig l) <> (VSig r) = VSig $ l >< r
+
+instance AppendR VSignature VMetaDefinition where
+  (VSig l) |> def = VSig $ l |> def
 
 -- neutral
 data Neutral
   = NVar LevelId
-  | NApp Neutral (NonEmpty Value)
+  | NApp Neutral ValueSeq
   | NNatElim Value Value Neutral
   | NDBind Neutral Closure
   | NForce Neutral
@@ -110,4 +123,4 @@ vVar = VNeutral . NVar
 neutralApp :: Neutral -> Value -> Neutral
 neutralApp n arg = case n of
   NApp h args -> NApp h (arg <| args)
-  _ -> NApp n $ singleton arg
+  _ -> NApp n $ Seq.singleton arg

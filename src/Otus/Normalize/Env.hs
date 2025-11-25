@@ -30,15 +30,25 @@ newtype Environment = Env ValueSeq
 instance Sized Environment where
   size (Env vals) = length vals
 
+instance AppendR Environment Value where
+  (Env vals) |> val = Env $ vals |> val
+
+instance Extend Environment ValueSeq where
+  (Env e) >< vals = Env $ e >< vals
+
+instance IndexableSeq Environment where
+  type Item Environment = Value
+  (Env e) @? idx = e @? idx
+
 -- raw operations
 push :: Value -> Environment -> Environment
-push val (Env e) = Env $ e Seq.|> val
+push val env = env |> val
 
 push' :: ValueSeq -> Environment -> Environment
-push' vals (Env e) = Env $ e Seq.>< vals
+push' vals env = env >< vals
 
-find :: (CtxIndex id) => id -> Environment -> Maybe Value
-find idx (Env e) = e Seq.!? intoLevelInt e idx
+find :: (SeqIndex id) => id -> Environment -> Maybe Value
+find idx (Env e) = e @? idx
 
 -- basic operations
 envLevel :: Environment -> LevelId

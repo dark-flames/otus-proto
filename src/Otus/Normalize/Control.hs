@@ -31,6 +31,7 @@ data EvalError
   | ForceOnNonLocal
   | AssignOnNonLocal
   | OpenNonLocal
+  | UnsolvableTmEq VTelescope Value Value Value
   deriving (Eq, Show)
 
 type EvalResult = Result EvalError
@@ -51,7 +52,7 @@ doPushFreshVar = do
   put env
   return val
 
-doFind :: (CtxIndex id) => id -> EvalMonad (Maybe Value)
+doFind :: (SeqIndex id) => id -> EvalMonad (Maybe Value)
 doFind idx = gets $ find idx
 
 doGetEnvLevel :: EvalMonad LevelId
