@@ -40,10 +40,8 @@ instance (Applicative m) => Applicative (ResultT e m) where
   pure a = ResultT $ pure $ Success a
   tf <*> ta =
     ResultT $
-      let
-        rf = runResultT tf
-      in
-        fmap (<*>) rf <*> runResultT ta
+      let rf = runResultT tf
+      in fmap (<*>) rf <*> runResultT ta
 
 instance (Monad m) => Monad (ResultT e m) where
   ta >>= f = ResultT $ do

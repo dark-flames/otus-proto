@@ -97,8 +97,7 @@ assignSolvedMeta lvl cls =
 -- Solve
 solveSignature :: LevelId -> VSignature -> EvalResult (Maybe VSignature)
 solveSignature lvl vSig = do
-  let
-    problem = fromVSig lvl vSig
+  let problem = fromVSig lvl vSig
   (noConflict, problem') <- runStateT doSolve problem
   if noConflict then
     return $ Just $ toVSig problem'
@@ -148,7 +147,7 @@ solveConstraintsOnce = foldlM go (Seq.Empty, NoModification)
     go (simplified, res) constr =
       if notConflict res then do
         (constrs, res') <- solveConstraint constr
-        return (simplified Seq.>< constrs, res <> res')
+        return (simplified >< constrs, res <> res')
       else
         return (simplified Seq.:|> constr, res)
 
@@ -162,8 +161,7 @@ solveTmEq vTele (lhs, rhs) = \case
     (vCod, arg) <- doEvalClsFresh codCls
     vLhs <- doEvalApp lhs arg
     vRhs <- doEvalApp rhs arg
-    let
-      vTele' = vTele |> vDom
+    let vTele' = vTele |> vDom
     solveTmEq vTele' (vLhs, vRhs) vCod
   vty -> return (Seq.singleton $ VTmEq vTele lhs rhs vty, Conflict)
 

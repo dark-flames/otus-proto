@@ -65,10 +65,8 @@ pushFreshVarN n env = snd (pushFreshVarN' n env)
 
 pushFreshVar' :: Environment -> (Value, Environment)
 pushFreshVar' env =
-  let
-    val = (vVar $ LevelId (size env))
-  in
-    (val, push val env)
+  let val = (vVar $ LevelId (size env))
+  in (val, push val env)
 
 pushFreshVarN' :: Int -> Environment -> (ValueSeq, Environment)
 pushFreshVarN' n env =

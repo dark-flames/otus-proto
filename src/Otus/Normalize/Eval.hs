@@ -28,8 +28,7 @@ evaluate tm env = case tm of
     Nothing -> throwError $ UnboundIndex idx
   Pi domain codomain -> do
     domainVal <- go domain
-    let
-      closure = Closure env codomain
+    let closure = Closure env codomain
     return $ VPi domainVal closure
   Lam body -> return $ VLam $ Closure env body
   App fn arg -> do
@@ -97,15 +96,13 @@ evalClosure' args (Closure env tm) = evaluate tm (push' args env)
 
 evalClosureFresh :: Closure -> EvalResult (Value, Value)
 evalClosureFresh (Closure env tm) = do
-  let
-    (arg, env') = pushFreshVar' env
+  let (arg, env') = pushFreshVar' env
   res <- evaluate tm env'
   return (res, arg)
 
 evalClosureFreshN :: Int -> Closure -> EvalResult (Value, ValueSeq)
 evalClosureFreshN n (Closure env tm) = do
-  let
-    (args, env') = pushFreshVarN' n env
+  let (args, env') = pushFreshVarN' n env
   res <- evaluate tm env'
   return (res, args)
 
@@ -206,8 +203,7 @@ evalNatElim baseVal stepVal = \case
 evalDbind :: Value -> Closure -> EvalResult Value
 evalDbind val nextCls = case val of
   VOk (VSubst subst) prevVal -> do
-    let
-      subst' = subst |> prevVal
+    let subst' = subst |> prevVal
     res <- evalClosure' subst' nextCls
     return $ VOk (VSubst subst') res
   VTyErr -> return VTyErr
@@ -227,10 +223,8 @@ evalAssign n vsig = \case
 evalOpen :: Value -> Value -> EvalResult Value
 evalOpen vPrev vNext = case vPrev of
   VGuarded n (VSig defs) prevInnerCls ->
-    let
-      vSig = VSig $ defs |> VMSolved prevInnerCls
-    in
-      evalAssign n vSig vNext
+    let vSig = VSig $ defs |> VMSolved prevInnerCls
+    in evalAssign n vSig vNext
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NOpen neutral vNext
   _ -> throwError OpenNonLocal

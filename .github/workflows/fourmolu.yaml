@@ -1,4 +1,4 @@
-name: formolu
+name: fourmolu
 
 on: [push, pull_request]
 

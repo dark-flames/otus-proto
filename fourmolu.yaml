@@ -38,7 +38,7 @@ haddock-style-module: null
 haddock-location-signature: leading
 
 # Styling of let blocks (choices: auto, inline, newline, or mixed)
-let-style: newline
+let-style: mixed
 
 # How to align the 'in' keyword with respect to the 'let' keyword (choices: left-align, right-align, or no-space)
 in-style: no-space
