@@ -13,8 +13,6 @@ module Otus.Normalize.Value (
   neutralApp,
 ) where
 
-import qualified Data.Sequence as Seq
-
 import Otus.Ast
 import Otus.Common
 import {-# SOURCE #-} Otus.Normalize.Env
@@ -26,33 +24,19 @@ data Closure = Closure Environment Term
 newtype VTelescope = VTele ValueSeq
   deriving (Eq, Show)
 
-instance Sized VTelescope where
-  size (VTele l) = length l
-
-instance AppendL VTelescope Value where
-  val <| (VTele l) = VTele (val <| l)
-
-instance AppendR VTelescope Value where
-  (VTele l) |> val = VTele (l |> val)
-
-instance Extend VTelescope VTelescope where
-  (VTele l) >< (VTele r) = VTele (l >< r)
+instance Sequence VTelescope where
+  type Item VTelescope = Value
+  fromSeq = VTele
+  toSeq (VTele s) = s
 
 -- substitution
 newtype VSubstitution = VSubst ValueSeq
   deriving (Eq, Show)
 
-instance Sized VSubstitution where
-  size (VSubst l) = length l
-
-instance AppendL VSubstitution Value where
-  val <| (VSubst l) = VSubst (val <| l)
-
-instance AppendR VSubstitution Value where
-  (VSubst l) |> val = VSubst (l |> val)
-
-instance Extend VSubstitution VSubstitution where
-  (VSubst l) >< (VSubst r) = VSubst (l >< r)
+instance Sequence VSubstitution where
+  type Item VSubstitution = Value
+  fromSeq = VSubst
+  toSeq (VSubst s) = s
 
 -- constraint
 data VConstraint
@@ -63,7 +47,7 @@ data VConstraint
 -- meta definition
 data VMetaDefinition
   = VMUnsolved
-  | VMGuarded Closure (Seq.Seq VConstraint)
+  | VMGuarded Closure (Seq VConstraint)
   | VMSolved Closure
   deriving (Eq, Show)
 
@@ -73,17 +57,13 @@ data VMetaView
   deriving (Eq, Show)
 
 -- signature
-newtype VSignature = VSig (Seq.Seq VMetaDefinition)
+newtype VSignature = VSig (Seq VMetaDefinition)
   deriving (Eq, Show)
 
-instance Sized VSignature where
-  size (VSig l) = length l
-
-instance Semigroup VSignature where
-  (VSig l) <> (VSig r) = VSig $ l >< r
-
-instance AppendR VSignature VMetaDefinition where
-  (VSig l) |> def = VSig $ l |> def
+instance Sequence VSignature where
+  type Item VSignature = VMetaDefinition
+  fromSeq = VSig
+  toSeq (VSig s) = s
 
 -- neutral
 data Neutral
@@ -97,7 +77,7 @@ data Neutral
   deriving (Eq, Show)
 
 -- value
-type ValueSeq = Seq.Seq Value
+type ValueSeq = Seq Value
 
 data Value
   = VNeutral Neutral
@@ -123,4 +103,4 @@ vVar = VNeutral . NVar
 neutralApp :: Neutral -> Value -> Neutral
 neutralApp n arg = case n of
   NApp h args -> NApp h (arg <| args)
-  _ -> NApp n $ Seq.singleton arg
+  _ -> NApp n $ singleton arg

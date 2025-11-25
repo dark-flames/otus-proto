@@ -22,8 +22,8 @@ library
       Otus.Ast.Term
       Otus.Ast.Univ
       Otus.Common
-      Otus.Common.Iter
       Otus.Common.Result
+      Otus.Common.Seq
       Otus.Common.Utils
       Otus.Normalize
       Otus.Normalize.Control
@@ -46,6 +46,7 @@ library
       PatternSynonyms
       ViewPatterns
       TypeFamilies
+      TypeOperators
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       base >=4.20.1.0 && <4.20.2.0

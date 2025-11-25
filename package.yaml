@@ -35,6 +35,7 @@ default-extensions:
 - PatternSynonyms
 - ViewPatterns
 - TypeFamilies
+- TypeOperators
 
 library:
   source-dirs: src

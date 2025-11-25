@@ -10,9 +10,6 @@ module Otus.Normalize.Eval (
 import Control.Exception (assert)
 import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.State.Strict (get, lift)
-import Data.Foldable (foldlM)
-
-import qualified Data.Sequence as Seq
 
 import Otus.Ast
 import Otus.Common
@@ -91,7 +88,7 @@ evaluate tm env = case tm of
 evalClosure :: Value -> Closure -> EvalResult Value
 evalClosure arg (Closure env tm) = evaluate tm (push arg env)
 
-evalClosure' :: ValueSeq -> Closure -> EvalResult Value
+evalClosure' :: (Item l ~ Value, Sequence l) => l -> Closure -> EvalResult Value
 evalClosure' args (Closure env tm) = evaluate tm (push' args env)
 
 evalClosureFresh :: Closure -> EvalResult (Value, Value)
@@ -108,7 +105,7 @@ evalClosureFreshN n (Closure env tm) = do
 
 -- effect: push evaluated telesope to the environment
 evalTelescope :: Telescope -> EvalMonad VTelescope
-evalTelescope (Tele tys) = VTele <$> mapM go tys
+evalTelescope (Tele tys) = seqMapM go tys
   where
     go ty = do
       vty <- doEvaluate ty
@@ -116,7 +113,7 @@ evalTelescope (Tele tys) = VTele <$> mapM go tys
       return vty
 
 evalSubstitution :: Substitution -> Environment -> EvalResult VSubstitution
-evalSubstitution (Subst tms) env = VSubst <$> mapM (`evaluate` env) tms
+evalSubstitution (Subst tms) env = seqMapM (`evaluate` env) tms
 
 evalConstraint :: Constraint -> Environment -> EvalResult VConstraint
 evalConstraint constr env = case constr of
@@ -138,7 +135,7 @@ evalMetaDef baseEnv def = case def of
   MUnsolved -> doPushFreshVar >> return VMUnsolved
   MGuarded tm constrs -> do
     env <- get
-    constrVals <- lift $ mapM (`evalConstraint` env) constrs
+    constrVals <- lift $ seqMapM (`evalConstraint` env) constrs
     _ <- doPushFreshVar
     return (VMGuarded (Closure baseEnv tm) constrVals)
   MSolved tm -> do
@@ -150,7 +147,7 @@ evalMetaDef baseEnv def = case def of
 evalSignature :: Signature -> EvalMonad VSignature
 evalSignature (Sig defs) = do
   env <- get
-  VSig <$> mapM (evalMetaDef env) defs
+  seqMapM (evalMetaDef env) defs
 
 -- staging
 evalForce :: LevelId -> Value -> EvalResult Value
@@ -162,17 +159,17 @@ evalForce base = \case
       Just vSig' ->
         forceVSignature vSig' >>= \case
           -- ensure all meta is Solved
-          Just args -> VOk (VSubst args) <$> evalClosure' args cls
+          Just vSubst -> VOk vSubst <$> evalClosure' vSubst cls
           Nothing -> return VTyErr -- unsolved meta variable
       Nothing -> return VTyErr -- conflict
   VError -> return VTyErr
   VNeutral neu -> return $ VNeutral $ NForce neu
   _ -> throwError ForceOnNonLocal
 
-forceVSignature :: VSignature -> EvalResult (Maybe ValueSeq)
-forceVSignature (VSig defs) = foldlM f (Just Seq.Empty) defs
+forceVSignature :: VSignature -> EvalResult (Maybe VSubstitution)
+forceVSignature = seqFoldlM f (Just empty)
   where
-    f :: Maybe ValueSeq -> VMetaDefinition -> EvalResult (Maybe ValueSeq)
+    f :: Maybe VSubstitution -> VMetaDefinition -> EvalResult (Maybe VSubstitution)
     f res vDef = case res of
       Just args -> case vDef of
         VMSolved cls -> do
@@ -188,24 +185,24 @@ evalApp fnVal argVal = case fnVal of
   VNeutral neutral -> returnNeutral $ neutralApp neutral argVal
   _ -> throwError AppOnNonLambda
 
-evalApp' :: Value -> ValueSeq -> EvalResult Value
-evalApp' = foldlM evalApp
+evalApp' :: (Item l ~ Value, Sequence l) => Value -> l -> EvalResult Value
+evalApp' = seqFoldlM evalApp
 
 evalNatElim :: Value -> Value -> Value -> EvalResult Value
 evalNatElim baseVal stepVal = \case
   VZero _ -> return baseVal
   VSucc prevVal -> do
     recResVal <- evalNatElim baseVal stepVal prevVal
-    evalApp' stepVal $ Seq.fromList [prevVal, recResVal]
+    evalApp' stepVal $ asSeq [prevVal, recResVal]
   VNeutral neutral -> returnNeutral $ NNatElim baseVal stepVal neutral
   _ -> throwError NatElimOnNonNat
 
 evalDbind :: Value -> Closure -> EvalResult Value
 evalDbind val nextCls = case val of
-  VOk (VSubst subst) prevVal -> do
-    let subst' = subst |> prevVal
-    res <- evalClosure' subst' nextCls
-    return $ VOk (VSubst subst') res
+  VOk vSubst prevVal -> do
+    let vSubst' = vSubst |> prevVal
+    res <- evalClosure' vSubst' nextCls
+    return $ VOk vSubst res
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NDBind neutral nextCls
   _ -> throwError DBindOnNonDynamic
@@ -215,16 +212,16 @@ evalAssign n vsig = \case
   VGuarded m vsig' inner ->
     assert (n + size vsig' == m) $ -- by typing
       return $
-        VGuarded n (vsig <> vsig') inner
+        VGuarded n (vsig >< vsig') inner
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NAssign n vsig neutral
   _ -> throwError AssignOnNonLocal
 
 evalOpen :: Value -> Value -> EvalResult Value
 evalOpen vPrev vNext = case vPrev of
-  VGuarded n (VSig defs) prevInnerCls ->
-    let vSig = VSig $ defs |> VMSolved prevInnerCls
-    in evalAssign n vSig vNext
+  VGuarded n vSig prevInnerCls ->
+    let vSig' = vSig |> VMSolved prevInnerCls
+    in evalAssign n vSig' vNext
   VTyErr -> return VTyErr
   VNeutral neutral -> returnNeutral $ NOpen neutral vNext
   _ -> throwError OpenNonLocal

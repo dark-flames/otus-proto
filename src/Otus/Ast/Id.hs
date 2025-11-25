@@ -2,14 +2,13 @@ module Otus.Ast.Id (
   IndexId (..),
   LevelId (..),
   SeqIndex (..),
-  IndexableSeq (..),
   incrLvl,
   levelRng,
   toLevel,
   toIndex,
 ) where
 
-import Otus.Common.Iter
+import Otus.Common
 
 newtype IndexId = IndexId Int
   deriving (Eq, Ord, Show)
@@ -20,7 +19,7 @@ instance SeqIndex IndexId where
   intoLeftIndex l (IndexId i) = size l - i - 1
   intoRightIndex _ (IndexId i) = i
 
-toLevel :: (Sized (l a)) => l a -> IndexId -> LevelId
+toLevel :: (Sequence l) => l -> IndexId -> LevelId
 toLevel s idx = LevelId $ intoLeftIndex s idx
 
 newtype LevelId = LevelId Int
@@ -38,5 +37,5 @@ incrLvl = shift 1
 levelRng :: LevelId -> Int -> [LevelId]
 levelRng base rng = map (`shift` base) [0 .. rng]
 
-toIndex :: (Sized (l a)) => l a -> LevelId -> IndexId
+toIndex :: (Sequence l) => l -> LevelId -> IndexId
 toIndex s lvl = IndexId $ intoRightIndex s lvl

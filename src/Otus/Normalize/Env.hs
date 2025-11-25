@@ -13,8 +13,6 @@ module Otus.Normalize.Env (
   lensIterM,
 ) where
 
-import qualified Data.Sequence as Seq
-
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Value
@@ -27,24 +25,18 @@ metaViewIntoItem lvl = \case
 newtype Environment = Env ValueSeq
   deriving (Eq, Show)
 
-instance Sized Environment where
-  size (Env vals) = length vals
-
-instance AppendR Environment Value where
-  (Env vals) |> val = Env $ vals |> val
-
-instance Extend Environment ValueSeq where
-  (Env e) >< vals = Env $ e >< vals
-
-instance IndexableSeq Environment where
+instance Sequence Environment where
   type Item Environment = Value
-  (Env e) @? idx = e @? idx
+
+  fromList = Env . fromList
+  toSeq (Env s) = s
+  fromSeq = Env
 
 -- raw operations
 push :: Value -> Environment -> Environment
 push val env = env |> val
 
-push' :: ValueSeq -> Environment -> Environment
+push' :: (Item l ~ Value, Sequence l) => l -> Environment -> Environment
 push' vals env = env >< vals
 
 find :: (SeqIndex id) => id -> Environment -> Maybe Value
@@ -72,7 +64,7 @@ pushFreshVarN' :: Int -> Environment -> (ValueSeq, Environment)
 pushFreshVarN' n env =
   let
     base = LevelId (size env)
-    vals = Seq.fromList $ map vVar $ levelRng base n
+    vals = fromList $ map vVar $ levelRng base n
   in
     (vals, push' vals env)
 

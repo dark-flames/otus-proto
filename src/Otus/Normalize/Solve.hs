@@ -4,9 +4,7 @@ module Otus.Normalize.Solve (
 
 import Control.Monad (when)
 import Control.Monad.State.Strict (MonadTrans (lift), StateT (runStateT), gets, modify)
-import Data.Foldable (foldlM)
-
-import qualified Data.Sequence as Seq
+import Data.Maybe (fromJust)
 
 import Otus.Ast
 import Otus.Common
@@ -26,17 +24,17 @@ asClosure = \case
 
 data MetaState
   = MSUnknown LevelId
-  | MSGuarded LevelId CachedClosure (Seq.Seq VConstraint)
+  | MSGuarded LevelId CachedClosure (Seq VConstraint)
   | MSSolved LevelId CachedClosure
   deriving (Eq, Show)
 
-type MetaStateSeq = Seq.Seq MetaState
+type MetaStateSeq = Seq MetaState
 
 data Problem = Problem LevelId MetaStateSeq
   deriving (Eq, Show)
 
 adjustState :: LevelId -> (MetaState -> MetaState) -> Problem -> Problem
-adjustState idx h (Problem base s) = Problem base $ Seq.adjust h (sub idx base) s
+adjustState idx h (Problem base s) = Problem base $ adjust h (sub idx base) s
 
 type SolveMonad = StateT Problem EvalResult
 
@@ -66,11 +64,11 @@ notConflict = \case
 fromVSig :: LevelId -> VSignature -> Problem
 fromVSig lvl (VSig defs) = Problem lvl $ go lvl defs
   where
-    go _ Seq.Empty = Seq.Empty
-    go l (def Seq.:<| rest) = case def of
-      VMUnsolved -> MSUnknown l Seq.:<| go (incrLvl l) rest
-      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs Seq.:<| go (incrLvl l) rest
-      VMSolved cls -> MSSolved l (Unevaluated cls) Seq.:<| go (incrLvl l) rest
+    go _ Empty = empty
+    go l (def :<| rest) = case def of
+      VMUnsolved -> MSUnknown l <| go (incrLvl l) rest
+      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (incrLvl l) rest
+      VMSolved cls -> MSSolved l (Unevaluated cls) <| go (incrLvl l) rest
 
 toVSig :: Problem -> VSignature
 toVSig (Problem _ states) = VSig $ f <$> states
@@ -82,7 +80,7 @@ toVSig (Problem _ states) = VSig $ f <$> states
 
 -- Control
 getMetaState :: LevelId -> SolveMonad MetaState
-getMetaState lvl = gets (\(Problem base s) -> Seq.index s $ sub lvl base)
+getMetaState lvl = gets (\(Problem base s) -> fromJust $ s @? sub lvl base)
 
 getBaseLevel :: SolveMonad LevelId
 getBaseLevel = gets (\(Problem base _) -> base)
@@ -130,7 +128,7 @@ solveSingle lvl =
       return $ res <> Modified lvl
     _ -> return NoModification
 
-solveConstraints :: Seq.Seq VConstraint -> SolveMonad (Seq.Seq VConstraint, SolveResult)
+solveConstraints :: Seq VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
 solveConstraints constrs = do
   (simplified, res) <- solveConstraintsOnce constrs
   case res of
@@ -141,21 +139,21 @@ solveConstraints constrs = do
 
 --- solve given constraints
 --- effect: update previous meta state if any meta was solved
-solveConstraintsOnce :: Seq.Seq VConstraint -> SolveMonad (Seq.Seq VConstraint, SolveResult)
-solveConstraintsOnce = foldlM go (Seq.Empty, NoModification)
+solveConstraintsOnce :: Seq VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
+solveConstraintsOnce = seqFoldlM go (empty, NoModification)
   where
     go (simplified, res) constr =
       if notConflict res then do
         (constrs, res') <- solveConstraint constr
         return (simplified >< constrs, res <> res')
       else
-        return (simplified Seq.:|> constr, res)
+        return (simplified |> constr, res)
 
-solveConstraint :: VConstraint -> SolveMonad (Seq.Seq VConstraint, SolveResult)
+solveConstraint :: VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
 solveConstraint (VTmEq vTele lhs rhs vTy) = solveTmEq vTele (lhs, rhs) vTy
 solveConstraint _ = undefined
 
-solveTmEq :: VTelescope -> (Value, Value) -> Value -> SolveMonad (Seq.Seq VConstraint, SolveResult)
+solveTmEq :: VTelescope -> (Value, Value) -> Value -> SolveMonad (Seq VConstraint, SolveResult)
 solveTmEq vTele (lhs, rhs) = \case
   VPi vDom codCls -> do
     (vCod, arg) <- doEvalClsFresh codCls
@@ -163,7 +161,7 @@ solveTmEq vTele (lhs, rhs) = \case
     vRhs <- doEvalApp rhs arg
     let vTele' = vTele |> vDom
     solveTmEq vTele' (vLhs, vRhs) vCod
-  vty -> return (Seq.singleton $ VTmEq vTele lhs rhs vty, Conflict)
+  vty -> return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
 
 -- evaluate
 doEvalClsFresh :: Closure -> SolveMonad (Value, Value)
