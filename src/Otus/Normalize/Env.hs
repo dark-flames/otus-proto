@@ -6,7 +6,9 @@ module Otus.Normalize.Env (
   pushVSubst,
   envLevel,
   pushFreshVar,
+  pushFreshVarN,
   pushFreshVar',
+  pushFreshVarN',
   find,
   lensIterM,
 ) where
@@ -48,12 +50,23 @@ pushVSubst (VSubst vals) = push' vals
 pushFreshVar :: Environment -> Environment
 pushFreshVar = snd . pushFreshVar'
 
+pushFreshVarN :: Int -> Environment -> Environment
+pushFreshVarN n env = snd (pushFreshVarN' n env)
+
 pushFreshVar' :: Environment -> (Value, Environment)
 pushFreshVar' env =
   let
     val = (vVar $ LevelId (size env))
   in
     (val, push val env)
+
+pushFreshVarN' :: Int -> Environment -> (ValueSeq, Environment)
+pushFreshVarN' n env =
+  let
+    base = LevelId (size env)
+    vals = Seq.fromList $ map vVar $ levelRng base n
+  in
+    (vals, push' vals env)
 
 -- iteration
 lensIterM

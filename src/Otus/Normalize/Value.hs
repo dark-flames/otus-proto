@@ -77,8 +77,10 @@ data Neutral
   = NVar LevelId
   | NApp Neutral (NonEmpty Value)
   | NNatElim Value Value Neutral
-  | NDBind Closure Neutral
+  | NDBind Neutral Closure
   | NForce Neutral
+  | NAssign Int VSignature Neutral
+  | NOpen Neutral Value
   deriving (Eq, Show)
 
 -- value
@@ -97,8 +99,8 @@ data Value
   | VOk VSubstitution Value
   | VTyErr
   | -- Meta
-    VLocal VTelescope Value
-  | VGuarded VSignature Closure
+    VLocal VTelescope VTelescope Value
+  | VGuarded Int VSignature Closure
   | VError
   deriving (Eq, Show)
 

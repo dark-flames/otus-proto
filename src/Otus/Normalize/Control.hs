@@ -29,6 +29,7 @@ data EvalError
   | JOnNonId
   | DBindOnNonDynamic
   | ForceOnNonLocal
+  | AssignOnNonLocal
   | OpenNonLocal
   deriving (Eq, Show)
 

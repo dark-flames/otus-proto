@@ -43,7 +43,7 @@ evaluate tm env = case tm of
     evalNatElim baseVal stepVal nVal
   Type stage univ -> return $ VType stage univ
   -- Object
-  Force metaTm -> go metaTm >>= evalForce
+  Force metaTm -> go metaTm >>= evalForce (envLevel env)
   Dynamic tele ty -> do
     (teleVal, env') <- runEvalMonad (evalTelescope tele) env
     tyVal <- evaluate ty env'
@@ -53,24 +53,35 @@ evaluate tm env = case tm of
     resVal <- go res
     return $ extendOk substVal resVal
   TyErr -> return VTyErr
-  DBind next prev -> do
+  DBind prev next -> do
     prevVal <- go prev
-    evalDbind (Closure env next) prevVal
+    evalDbind prevVal (Closure env next)
   -- Meta
-  Local tele ty -> do
-    (teleVal, env') <- runEvalMonad (evalTelescope tele) env
+  Local freeTele boundTele ty -> do
+    ((freeVTele, boundVTele), env') <-
+      runEvalMonad
+        ( do
+            f <- evalTelescope freeTele
+            b <- evalTelescope boundTele
+            return (f, b)
+        )
+        env
     tyVal <- evaluate ty env'
-    return $ VLocal teleVal tyVal
-  Guarded sig inner -> do
-    vSig <- evalEvalMonad (evalSignature sig) env
-    res <- solveSignature (envLevel env) vSig
-    case res of
-      Just vSig' -> return $ VGuarded vSig' (Closure env inner)
-      _ -> return VError -- conflict
-      -- Todo : Weakening
-      -- Todo : LetOpen
+    return $ VLocal freeVTele boundVTele tyVal
+  Guarded n sig inner -> do
+    vSig <- evalEvalMonad (evalSignature sig) (pushFreshVarN n env)
+    return $ VGuarded n vSig (Closure env inner)
+  -- Todo : Weakening
+  -- Todo : LetOpen
+  Assign n sig local -> do
+    vSig <- evalEvalMonad (evalSignature sig) (pushFreshVarN n env)
+    vLocal <- go local
+    evalAssign n vSig vLocal
+  Open prev next -> do
+    vPre <- go prev
+    vNext <- go next
+    evalOpen vPre vNext
   Error -> return VError
-  _ -> undefined
   where
     go tm' = evaluate tm' env
 
@@ -137,12 +148,18 @@ extendOk vSubst = \case
   val -> VOk vSubst val
 
 -- staging
-evalForce :: Value -> EvalResult Value
-evalForce = \case
-  VGuarded vSig cls ->
-    forceVSignature vSig >>= \case
-      Just args -> VOk (VSubst args) <$> evalClosure' args cls
-      Nothing -> return VTyErr
+evalForce :: LevelId -> Value -> EvalResult Value
+evalForce base = \case
+  -- _n == 0 was guarded by type system
+  VGuarded _n vSig cls ->
+    solveSignature base vSig >>= \case
+      -- try solve vSig
+      Just vSig' ->
+        forceVSignature vSig' >>= \case
+          -- ensure all meta is Solved
+          Just args -> VOk (VSubst args) <$> evalClosure' args cls
+          Nothing -> return VTyErr -- unsolved meta variable
+      Nothing -> return VTyErr -- conflict
   VError -> return VTyErr
   VNeutral neu -> return $ VNeutral $ NForce neu
   _ -> throwError ForceOnNonLocal
@@ -178,16 +195,35 @@ evalNatElim baseVal stepVal = \case
   VNeutral neutral -> returnNeutral $ NNatElim baseVal stepVal neutral
   _ -> throwError NatElimOnNonNat
 
-evalDbind :: Closure -> Value -> EvalResult Value
-evalDbind nextCls = \case
+evalDbind :: Value -> Closure -> EvalResult Value
+evalDbind val nextCls = case val of
   VOk (VSubst subst) prevVal -> do
     let
       subst' = subst Seq.:|> prevVal
     res <- evalClosure' subst' nextCls
     return $ extendOk (VSubst subst') res
   VTyErr -> return VTyErr
-  VNeutral neutral -> returnNeutral $ NDBind nextCls neutral
+  VNeutral neutral -> returnNeutral $ NDBind neutral nextCls
   _ -> throwError DBindOnNonDynamic
+
+evalAssign :: Int -> VSignature -> Value -> EvalResult Value
+evalAssign n vsig = \case
+  -- assert n + |vsig| = _m ()
+  VGuarded _m vsig' inner -> return $ VGuarded n (vsig <> vsig') inner
+  VTyErr -> return VTyErr
+  VNeutral neutral -> returnNeutral $ NAssign n vsig neutral
+  _ -> throwError AssignOnNonLocal
+
+evalOpen :: Value -> Value -> EvalResult Value
+evalOpen vPrev vNext = case vPrev of
+  VGuarded n (VSig defs) prevInnerCls ->
+    let
+      vSig = VSig $ defs Seq.|> VMSolved prevInnerCls
+    in
+      evalAssign n vSig vNext
+  VTyErr -> return VTyErr
+  VNeutral neutral -> returnNeutral $ NOpen neutral vNext
+  _ -> throwError OpenNonLocal
 
 -- utils
 doEvaluate :: Term -> EvalMonad Value

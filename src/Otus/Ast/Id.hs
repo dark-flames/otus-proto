@@ -3,6 +3,7 @@ module Otus.Ast.Id (
   LevelId (..),
   CtxIndex (..),
   incrLvl,
+  levelRng,
 ) where
 
 import Otus.Common.Iter
@@ -39,3 +40,6 @@ instance CtxIndex LevelId where
 
 incrLvl :: LevelId -> LevelId
 incrLvl = shift 1
+
+levelRng :: LevelId -> Int -> [LevelId]
+levelRng base rng = map (`shift` base) [0 .. rng]

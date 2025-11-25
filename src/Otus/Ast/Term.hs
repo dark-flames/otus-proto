@@ -69,12 +69,9 @@ data Term
   | DBind Term Term
   | Force Term
   | -- Meta
-    Local Telescope Term
-  | Guarded Signature Term
-  | Weaken PartialRenaming Term Term
+    Local Telescope Telescope Term
+  | Guarded Int Signature Term
   | Error
-  | ---- Γ |- p : Local Δ T   Γ Δ , T |- n : Local Δ' B
-    -----------------------------------------
-    ---- Γ |- let open p in n : Local Δ,T,Δ' B
-    LetOpen Term Term
+  | Assign Int Signature Term
+  | Open Term Term
   deriving (Eq, Show)
