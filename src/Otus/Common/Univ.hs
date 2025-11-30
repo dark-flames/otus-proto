@@ -1,4 +1,4 @@
-module Otus.Ast.Univ (
+module Otus.Common.Univ (
   Universe (..),
   Stage (..),
 ) where

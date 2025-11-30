@@ -4,6 +4,7 @@ module Otus.Normalize.Eval (
   evalClosureFresh,
   evalClosureFreshN,
   evalApp,
+  evalNatElim,
 ) where
 
 import Otus.Common
@@ -15,3 +16,4 @@ evalClosure' :: (Item l ~ Value, Sequence l) => l -> Closure -> EvalResult Value
 evalClosureFresh :: Closure -> EvalResult (Value, Value)
 evalClosureFreshN :: Int -> Closure -> EvalResult (Value, ValueSeq)
 evalApp :: Value -> Value -> EvalResult Value
+evalNatElim :: Value -> Value -> Value -> EvalResult Value

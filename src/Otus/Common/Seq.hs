@@ -44,10 +44,13 @@ class Sequence l where
   (@?) :: (SeqIndex id) => l -> id -> Maybe (Item l)
   l @? idx = toSeq l Seq.!? intoLeftIndex l idx
 
-  seqMap :: (Item t ~ a, Sequence t) => (Item l -> a) -> l -> t
+  mapWithIndex :: (Sequence t) => (Int -> Item l -> Item t) -> l -> t
+  mapWithIndex f l = fromSeq $ mapWithIndex f (toSeq l)
+
+  seqMap :: (Sequence t) => (Item l -> Item t) -> l -> t
   seqMap f l = fromSeq $ fmap f (toSeq l)
 
-  seqMapM :: (Item t ~ a, Monad m, Sequence t) => (Item l -> m a) -> l -> m t
+  seqMapM :: (Monad m, Sequence t) => (Item l -> m (Item t)) -> l -> m t
   seqMapM f l = fromSeq <$> mapM f (toSeq l)
 
   seqFoldlM :: (Monad m) => (a -> Item l -> m a) -> a -> l -> m a

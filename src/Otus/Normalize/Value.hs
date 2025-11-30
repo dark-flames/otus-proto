@@ -72,6 +72,7 @@ data Neutral
   | NNatElim Value Value Neutral
   | NDBind Neutral Closure
   | NForce Neutral
+  | NForceUnsolved VSignature Closure
   | NAssign Int VSignature Neutral
   | NOpen Neutral Value
   deriving (Eq, Show)

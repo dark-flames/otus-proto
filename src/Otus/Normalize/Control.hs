@@ -41,7 +41,7 @@ type EvalResultT = ResultT EvalError
 type EvalMonad = StateT Environment EvalResult
 
 doPush :: Value -> EvalMonad ()
-doPush val = modify (push val)
+doPush val = modify (|> val)
 
 returnAndPush :: Value -> EvalMonad Value
 returnAndPush val = doPush val >> return val

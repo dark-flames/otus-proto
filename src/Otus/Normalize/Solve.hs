@@ -151,17 +151,28 @@ solveConstraintsOnce = seqFoldlM go (empty, NoModification)
 
 solveConstraint :: VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
 solveConstraint (VTmEq vTele lhs rhs vTy) = solveTmEq vTele (lhs, rhs) vTy
-solveConstraint _ = undefined
+solveConstraint (VTyEq vTele lhs rhs) = solveTyEq vTele (lhs, rhs)
+
+solveTyEq :: VTelescope -> (Value, Value) -> SolveMonad (Seq VConstraint, SolveResult)
+solveTyEq _ = undefined
 
 solveTmEq :: VTelescope -> (Value, Value) -> Value -> SolveMonad (Seq VConstraint, SolveResult)
-solveTmEq vTele (lhs, rhs) = \case
+solveTmEq vTele (lhs, rhs) vty = case vty of
   VPi vDom codCls -> do
     (vCod, arg) <- doEvalClsFresh codCls
     vLhs <- doEvalApp lhs arg
     vRhs <- doEvalApp rhs arg
     let vTele' = vTele |> vDom
     solveTmEq vTele' (vLhs, vRhs) vCod
-  vty -> return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
+  VNat stage -> case (lhs, rhs) of
+    (VZero _, VZero _) -> return (empty, NoModification)
+    (VSucc lhs', VSucc rhs') -> solveTmEq vTele (lhs', rhs') $ VNat stage
+    (VZero _, VSucc _) -> returnConflict
+    (VSucc _, VZero _) -> returnConflict
+    _ -> undefined
+  _ -> returnConflict
+  where
+    returnConflict = return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
 
 -- evaluate
 doEvalClsFresh :: Closure -> SolveMonad (Value, Value)

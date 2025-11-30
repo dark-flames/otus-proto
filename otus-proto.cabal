@@ -20,15 +20,21 @@ library
       Otus.Ast
       Otus.Ast.Id
       Otus.Ast.Term
-      Otus.Ast.Univ
       Otus.Common
       Otus.Common.Result
       Otus.Common.Seq
+      Otus.Common.Univ
       Otus.Common.Utils
+      Otus.Elaboration
+      Otus.Elaboration.Context
+      Otus.Elaboration.Control
+      Otus.Elaboration.Elab
+      Otus.Elaboration.Expr
       Otus.Normalize
       Otus.Normalize.Control
       Otus.Normalize.Env
       Otus.Normalize.Eval
+      Otus.Normalize.Readback
       Otus.Normalize.Solve
       Otus.Normalize.Value
   other-modules:

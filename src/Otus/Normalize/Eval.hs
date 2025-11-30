@@ -5,6 +5,7 @@ module Otus.Normalize.Eval (
   evalClosureFresh,
   evalClosureFreshN,
   evalApp,
+  evalNatElim,
 ) where
 
 import Control.Exception (assert)
@@ -86,10 +87,10 @@ evaluate tm env = case tm of
 
 -- evaluation of meta structures
 evalClosure :: Value -> Closure -> EvalResult Value
-evalClosure arg (Closure env tm) = evaluate tm (push arg env)
+evalClosure arg (Closure env tm) = evaluate tm (env |> arg)
 
 evalClosure' :: (Item l ~ Value, Sequence l) => l -> Closure -> EvalResult Value
-evalClosure' args (Closure env tm) = evaluate tm (push' args env)
+evalClosure' args (Closure env tm) = evaluate tm (env >< args)
 
 evalClosureFresh :: Closure -> EvalResult (Value, Value)
 evalClosureFresh (Closure env tm) = do
@@ -160,10 +161,10 @@ evalForce base = \case
         forceVSignature vSig' >>= \case
           -- ensure all meta is Solved
           Just vSubst -> VOk vSubst <$> evalClosure' vSubst cls
-          Nothing -> return VTyErr -- unsolved meta variable
+          Nothing -> returnNeutral $ NForceUnsolved vSig' cls -- unsolved meta variable
       Nothing -> return VTyErr -- conflict
   VError -> return VTyErr
-  VNeutral neu -> return $ VNeutral $ NForce neu
+  VNeutral neu -> returnNeutral $ NForce neu
   _ -> throwError ForceOnNonLocal
 
 forceVSignature :: VSignature -> EvalResult (Maybe VSubstitution)

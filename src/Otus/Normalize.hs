@@ -3,9 +3,11 @@ module Otus.Normalize (
   module Otus.Normalize.Control,
   module Otus.Normalize.Value,
   module Otus.Normalize.Env,
+  module Otus.Normalize.Readback,
 ) where
 
 import Otus.Normalize.Control
 import Otus.Normalize.Env
 import Otus.Normalize.Eval
+import Otus.Normalize.Readback
 import Otus.Normalize.Value

@@ -9,7 +9,6 @@ module Otus.Ast.Term (
 ) where
 
 import Otus.Ast.Id
-import Otus.Ast.Univ
 import Otus.Common
 
 -- Telescope
