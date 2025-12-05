@@ -3,8 +3,8 @@ module Otus.Normalize.Object.Quote (
 ) where
 
 import Otus.Ast
-import Otus.Normalize.Control
+import Otus.Normalize.Object.Error
 import Otus.Normalize.Object.Value
 
-readback :: LevelId -> ObjValue -> EvalResult ObjTerm
+readback :: LevelId -> ObjValue -> ObjEvalResult ObjTerm
 readback = undefined

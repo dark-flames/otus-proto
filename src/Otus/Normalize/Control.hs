@@ -1,10 +1,5 @@
 module Otus.Normalize.Control (
-  EvalError (..),
-  EvalResult,
-  EvalResultT,
   EvalMonad,
-  ObjEvalMonad,
-  MetaEvalMonad,
   doPush,
   doPushFreshVar,
   doFind,
@@ -20,56 +15,32 @@ import Control.Monad.State.Strict (MonadState (put), StateT (runStateT), evalSta
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Env
-import Otus.Normalize.Meta.Value
-import Otus.Normalize.Object.Value
 
-data EvalError
-  = Anyhow String
-  | UnboundIndex IndexId
-  | UnknownMeta LevelId
-  | AppOnNonLambda
-  | NatElimOnNonNat
-  | JOnNonId
-  | DBindOnNonDynamic
-  | ForceOnNonLocal
-  | AssignOnNonLocal
-  | OpenNonLocal
-  | UnsolvableTmEq VTelescope ObjValue ObjValue ObjValue
-  deriving (Eq, Show)
+type EvalMonad err val = StateT (Environment val) (Result err)
 
-type EvalResult = Result EvalError
-
-type EvalResultT = ResultT EvalError
-
-type EvalMonad val = StateT (Environment val) EvalResult
-
-type ObjEvalMonad = EvalMonad ObjValue
-
-type MetaEvalMonad = EvalMonad MetaValue
-
-doPush :: val -> EvalMonad val ()
+doPush :: val -> EvalMonad err val ()
 doPush val = modify (|> val)
 
-returnAndPush :: val -> EvalMonad val val
+returnAndPush :: val -> EvalMonad err val val
 returnAndPush val = doPush val >> return val
 
-doPushFreshVar :: (Value val) => EvalMonad val val
+doPushFreshVar :: (Value val) => EvalMonad err val val
 doPushFreshVar = do
   (val, env) <- gets pushFreshVar'
   put env
   return val
 
-doFind :: (SeqIndex id) => id -> EvalMonad val (Maybe val)
+doFind :: (SeqIndex id) => id -> EvalMonad err val (Maybe val)
 doFind idx = gets $ find idx
 
-doGetEnvLevel :: EvalMonad val LevelId
+doGetEnvLevel :: EvalMonad val err LevelId
 doGetEnvLevel = gets envLevel
 
-returnNeutral :: Neutral -> EvalResult ObjValue
-returnNeutral = return . OVNeutral
+returnNeutral :: (Value val) => Neutral val -> Result err val
+returnNeutral = return . fromNeutral
 
-runEvalMonad :: EvalMonad val a -> Environment val -> EvalResult (a, Environment val)
+runEvalMonad :: EvalMonad err val a -> Environment val -> Result err (a, Environment val)
 runEvalMonad = runStateT
 
-evalEvalMonad :: EvalMonad val a -> Environment val -> EvalResult a
+evalEvalMonad :: EvalMonad err val a -> Environment val -> Result err a
 evalEvalMonad = evalStateT

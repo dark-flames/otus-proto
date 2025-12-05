@@ -21,7 +21,8 @@ data ElabError
   = Anyhow String
   | UnknownIdentifier String
   | DuplicateBinder String
-  | EvalError EvalError
+  | ObjEvalError ObjEvalError
+  | MetaEvalError MetaEvalError
   | StageError Expr Stage
   deriving (Eq, Show)
 
@@ -29,10 +30,10 @@ type ElabResult = Result ElabError
 
 type ElabResultT = ResultT ElabError
 
-fromEvalResult :: EvalResult a -> ElabResult a
+fromEvalResult :: ObjEvalResult a -> ElabResult a
 fromEvalResult = \case
   Success r -> Success r
-  Failure e -> Failure $ EvalError e
+  Failure e -> Failure $ ObjEvalError e
 
 doEvalCls :: ObjValue -> Closure -> ElabResult ObjValue
 doEvalCls arg cls = fromEvalResult $ evalClosure arg cls

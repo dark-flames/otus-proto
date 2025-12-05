@@ -34,9 +34,11 @@ library
       Otus.Normalize.Control
       Otus.Normalize.Env
       Otus.Normalize.Meta
+      Otus.Normalize.Meta.Error
       Otus.Normalize.Meta.Eval
       Otus.Normalize.Meta.Value
       Otus.Normalize.Object
+      Otus.Normalize.Object.Error
       Otus.Normalize.Object.Eval
       Otus.Normalize.Object.Quote
       Otus.Normalize.Object.Solve

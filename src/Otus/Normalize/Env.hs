@@ -15,7 +15,9 @@ import Otus.Ast
 import Otus.Common
 
 class Value val where
+  type Neutral val
   vVar :: LevelId -> val
+  fromNeutral :: Neutral val -> val
 
 newtype Environment val = Env (Seq val)
   deriving (Eq, Show)

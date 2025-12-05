@@ -18,9 +18,10 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Env
+import Otus.Normalize.Object.Error
 import Otus.Normalize.Object.Value
 
-evaluateObj :: ObjTerm -> ObjEnv -> EvalResult ObjValue
+evaluateObj :: ObjTerm -> ObjEnv -> ObjEvalResult ObjValue
 evaluateObj tm env = case tm of
   OVar idx -> case env @? idx of
     Just val -> return val
@@ -39,19 +40,19 @@ evaluateObj tm env = case tm of
     go tm' = evaluateObj tm' env
 
 -- evaluation of meta structures
-evalClosure :: ObjValue -> Closure -> EvalResult ObjValue
+evalClosure :: ObjValue -> Closure -> ObjEvalResult ObjValue
 evalClosure arg (Closure env tm) = evaluateObj tm (env |> arg)
 
-evalClosure' :: (Item l ~ ObjValue, Sequence l) => l -> Closure -> EvalResult ObjValue
+evalClosure' :: (Item l ~ ObjValue, Sequence l) => l -> Closure -> ObjEvalResult ObjValue
 evalClosure' args (Closure env tm) = evaluateObj tm (env >< args)
 
-evalClosureFresh :: Closure -> EvalResult (ObjValue, ObjValue)
+evalClosureFresh :: Closure -> ObjEvalResult (ObjValue, ObjValue)
 evalClosureFresh (Closure env tm) = do
   let (arg, env') = pushFreshVar' env
   res <- evaluateObj tm env'
   return (res, arg)
 
-evalClosureFreshN :: Int -> Closure -> EvalResult (ObjValue, ObjValueSeq)
+evalClosureFreshN :: Int -> Closure -> ObjEvalResult (ObjValue, ObjValueSeq)
 evalClosureFreshN n (Closure env tm) = do
   let (args, env') = pushFreshVarN' n env
   res <- evaluateObj tm env'
@@ -66,10 +67,10 @@ evalTelescope (Tele tys) = seqMapM go tys
       _ <- doPushFreshVar
       return vty
 
-evalSubstitution :: Substitution -> ObjEnv -> EvalResult VSubstitution
+evalSubstitution :: Substitution -> ObjEnv -> ObjEvalResult VSubstitution
 evalSubstitution (Subst tms) env = seqMapM (`evaluateObj` env) tms
 
-evalConstraint :: Constraint -> ObjEnv -> EvalResult VConstraint
+evalConstraint :: Constraint -> ObjEnv -> ObjEvalResult VConstraint
 evalConstraint constr env = case constr of
   TyEq tele lhs rhs -> do
     (vTele, env') <- runEvalMonad (evalTelescope tele) env
@@ -106,7 +107,7 @@ evalSignature (Sig defs) = do
 -- staging
 
 -- evaluation of eliminations
-evalApp :: ObjValue -> ObjValue -> EvalResult ObjValue
+evalApp :: ObjValue -> ObjValue -> ObjEvalResult ObjValue
 evalApp fnVal argVal = case fnVal of
   OVLam closure -> evalClosure argVal closure
   OVNeutral neutral -> returnNeutral $ neutralApp neutral argVal

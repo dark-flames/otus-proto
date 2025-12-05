@@ -8,7 +8,7 @@ import Data.Maybe (fromJust)
 
 import Otus.Ast
 import Otus.Common
-import Otus.Normalize.Control
+import Otus.Normalize.Object.Error
 import Otus.Normalize.Object.Eval
 import Otus.Normalize.Object.Value
 
@@ -36,7 +36,7 @@ data Problem = Problem LevelId MetaStateSeq
 adjustState :: LevelId -> (MetaState -> MetaState) -> Problem -> Problem
 adjustState idx h (Problem base s) = Problem base $ adjust h (sub idx base) s
 
-type SolveMonad = StateT Problem EvalResult
+type SolveMonad = StateT Problem ObjEvalResult
 
 data SolveResult
   = NoModification
@@ -93,7 +93,7 @@ assignSolvedMeta lvl cls =
   modify (adjustState lvl (const $ MSSolved lvl cls))
 
 -- Solve
-solveSignature :: LevelId -> VSignature -> EvalResult (Maybe VSignature)
+solveSignature :: LevelId -> VSignature -> ObjEvalResult (Maybe VSignature)
 solveSignature lvl vSig = do
   let problem = fromVSig lvl vSig
   (noConflict, problem') <- runStateT doSolve problem

@@ -8,7 +8,7 @@ module Otus.Normalize.Object.Value (
   VSignature (..),
   ObjValue (..),
   ObjValueSeq,
-  Neutral (..),
+  ObjNeutral (..),
   neutralApp,
 ) where
 
@@ -62,25 +62,27 @@ instance Sequence VSignature where
   toSeq (VSig s) = s
 
 -- neutral
-data Neutral
+data ObjNeutral
   = ONVar LevelId
-  | ONApp Neutral ObjValueSeq
+  | ONApp ObjNeutral ObjValueSeq
   deriving (Eq, Show)
 
 -- value
 type ObjValueSeq = Seq ObjValue
 
 data ObjValue
-  = OVNeutral Neutral
+  = OVNeutral ObjNeutral
   | OVPi ObjValue Closure
   | OVLam Closure
   | OVType Stage Universe
   deriving (Eq, Show)
 
 instance Value ObjValue where
+  type Neutral ObjValue = ObjNeutral
   vVar lvl = OVNeutral $ ONVar lvl
+  fromNeutral = OVNeutral
 
-neutralApp :: Neutral -> ObjValue -> Neutral
+neutralApp :: ObjNeutral -> ObjValue -> ObjNeutral
 neutralApp n arg = case n of
   ONApp h args -> ONApp h (arg <| args)
   _ -> ONApp n $ singleton arg

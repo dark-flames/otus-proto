@@ -25,4 +25,6 @@ data MetaValue
   deriving (Eq, Show)
 
 instance Value MetaValue where
+  type Neutral MetaValue = MetaNeutral
   vVar lvl = VMNeutral $ MNVar lvl
+  fromNeutral = VMNeutral
