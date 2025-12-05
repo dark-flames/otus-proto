@@ -1,7 +1,11 @@
 module Otus.Normalize.Meta.Value (
   MetaEnv,
+  MetaClosure (..),
+  MetaVType (..),
   MetaValueSeq,
-  MetaValue,
+  MetaNeutral (..),
+  MetaValue (..),
+  metaNeutralApp,
 ) where
 
 import Otus.Ast
@@ -11,20 +15,36 @@ import Otus.Normalize.Object.Value
 
 type MetaEnv = Environment MetaValue
 
+data MetaClosure = MetaClosure MetaEnv MetaTerm
+  deriving (Eq, Show)
+
 data MetaNeutral
   = MNVar LevelId
-  | MNApp MetaNeutral
+  | MNApp MetaNeutral MetaValueSeq
+  | MNBind MetaNeutral MetaValue
   deriving (Eq, Show)
 
 type MetaValueSeq = Seq MetaValue
 
+data MetaVType
+  = MVFn MetaVType MetaVType
+  | MVDyn MetaVType
+  | MVInner Telescope ObjValue
+  deriving (Eq, Show)
+
 data MetaValue
-  = VMNeutral MetaNeutral
-  | VMFn MetaValue MetaValue
-  | VMLam Closure
+  = MVNeutral MetaNeutral
+  | MVLam MetaClosure
+  | MVOk MetaValue
+  | MVErr
   deriving (Eq, Show)
 
 instance Value MetaValue where
   type Neutral MetaValue = MetaNeutral
-  vVar lvl = VMNeutral $ MNVar lvl
-  fromNeutral = VMNeutral
+  vVar lvl = MVNeutral $ MNVar lvl
+  fromNeutral = MVNeutral
+
+metaNeutralApp :: MetaNeutral -> MetaValue -> MetaNeutral
+metaNeutralApp n arg = case n of
+  MNApp h args -> MNApp h (arg <| args)
+  _ -> MNApp n $ singleton arg

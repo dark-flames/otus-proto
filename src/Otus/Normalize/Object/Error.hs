@@ -11,16 +11,10 @@ import Otus.Normalize.Control
 import Otus.Normalize.Object.Value
 
 data ObjEvalError
-  = Anyhow String
-  | UnboundIndex IndexId
-  | UnknownMeta LevelId
-  | AppOnNonLambda
-  | NatElimOnNonNat
-  | JOnNonId
-  | DBindOnNonDynamic
-  | ForceOnNonLocal
-  | AssignOnNonLocal
-  | OpenNonLocal
+  = ObjAnyhow String
+  | ObjUnboundIndex IndexId
+  | ObjUnknownMeta LevelId
+  | ObjAppOnNonLambda
   | UnsolvableTmEq VTelescope ObjValue ObjValue ObjValue
   deriving (Eq, Show)
 

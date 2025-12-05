@@ -35,7 +35,7 @@ fromEvalResult = \case
   Success r -> Success r
   Failure e -> Failure $ ObjEvalError e
 
-doEvalCls :: ObjValue -> Closure -> ElabResult ObjValue
+doEvalCls :: ObjValue -> ObjClosure -> ElabResult ObjValue
 doEvalCls arg cls = fromEvalResult $ evalClosure arg cls
 
 doEval :: ObjTerm -> Context -> ElabResult ObjValue

@@ -1,6 +1,6 @@
 module Otus.Normalize.Object.Value (
   ObjEnv,
-  Closure (..),
+  ObjClosure (..),
   VTelescope (..),
   VSubstitution (..),
   VConstraint (..),
@@ -9,7 +9,7 @@ module Otus.Normalize.Object.Value (
   ObjValue (..),
   ObjValueSeq,
   ObjNeutral (..),
-  neutralApp,
+  objNeutralApp,
 ) where
 
 import Otus.Ast
@@ -18,7 +18,7 @@ import Otus.Normalize.Env
 
 type ObjEnv = Environment ObjValue
 
-data Closure = Closure ObjEnv ObjTerm
+data ObjClosure = ObjClosure ObjEnv ObjTerm
   deriving (Eq, Show)
 
 -- telescope
@@ -47,9 +47,9 @@ data VConstraint
 
 -- meta definition
 data VMetaDefinition
-  = VMUnsolved
-  | VMGuarded Closure (Seq VConstraint)
-  | VMSolved Closure
+  = VUnsolved
+  | VGuarded ObjClosure (Seq VConstraint)
+  | VSolved ObjClosure
   deriving (Eq, Show)
 
 -- signature
@@ -72,8 +72,8 @@ type ObjValueSeq = Seq ObjValue
 
 data ObjValue
   = OVNeutral ObjNeutral
-  | OVPi ObjValue Closure
-  | OVLam Closure
+  | OVPi ObjValue ObjClosure
+  | OVLam ObjClosure
   | OVType Stage Universe
   deriving (Eq, Show)
 
@@ -82,7 +82,7 @@ instance Value ObjValue where
   vVar lvl = OVNeutral $ ONVar lvl
   fromNeutral = OVNeutral
 
-neutralApp :: ObjNeutral -> ObjValue -> ObjNeutral
-neutralApp n arg = case n of
+objNeutralApp :: ObjNeutral -> ObjValue -> ObjNeutral
+objNeutralApp n arg = case n of
   ONApp h args -> ONApp h (arg <| args)
   _ -> ONApp n $ singleton arg

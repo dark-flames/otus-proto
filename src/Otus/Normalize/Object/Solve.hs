@@ -13,11 +13,11 @@ import Otus.Normalize.Object.Eval
 import Otus.Normalize.Object.Value
 
 data CachedClosure
-  = Unevaluated Closure
-  | Evaluated Closure ObjValue
+  = Unevaluated ObjClosure
+  | Evaluated ObjClosure ObjValue
   deriving (Eq, Show)
 
-asClosure :: CachedClosure -> Closure
+asClosure :: CachedClosure -> ObjClosure
 asClosure = \case
   Unevaluated cls -> cls
   Evaluated cls _ -> cls
@@ -66,17 +66,17 @@ fromVSig lvl (VSig defs) = Problem lvl $ go lvl defs
   where
     go _ Empty = empty
     go l (def :<| rest) = case def of
-      VMUnsolved -> MSUnknown l <| go (lvl + 1) rest
-      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (lvl + 1) rest
-      VMSolved cls -> MSSolved l (Unevaluated cls) <| go (lvl + 1) rest
+      VUnsolved -> MSUnknown l <| go (lvl + 1) rest
+      VGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (lvl + 1) rest
+      VSolved cls -> MSSolved l (Unevaluated cls) <| go (lvl + 1) rest
 
 toVSig :: Problem -> VSignature
 toVSig (Problem _ states) = VSig $ f <$> states
   where
     f = \case
-      MSUnknown _ -> VMUnsolved
-      MSGuarded _ cached constrs -> VMGuarded (asClosure cached) constrs
-      MSSolved _ cached -> VMSolved (asClosure cached)
+      MSUnknown _ -> VUnsolved
+      MSGuarded _ cached constrs -> VGuarded (asClosure cached) constrs
+      MSSolved _ cached -> VSolved (asClosure cached)
 
 -- Control
 getMetaState :: LevelId -> SolveMonad MetaState
@@ -169,7 +169,7 @@ solveTmEq vTele (lhs, rhs) vty = case vty of
     returnConflict = return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
 
 -- evaluate
-doEvalClsFresh :: Closure -> SolveMonad (ObjValue, ObjValue)
+doEvalClsFresh :: ObjClosure -> SolveMonad (ObjValue, ObjValue)
 doEvalClsFresh cls = lift $ evalClosureFresh cls
 
 doEvalApp :: ObjValue -> ObjValue -> SolveMonad ObjValue

@@ -13,6 +13,8 @@ import Otus.Normalize.Meta.Value
 data MetaEvalError
   = MetaAnyhow String
   | MetaUnboundIndex IndexId
+  | MetaAppOnNonFn
+  | MetaBindOnNonDyn
   deriving (Eq, Show)
 
 type MetaEvalResult = Result MetaEvalError

@@ -25,12 +25,12 @@ evaluateObj :: ObjTerm -> ObjEnv -> ObjEvalResult ObjValue
 evaluateObj tm env = case tm of
   OVar idx -> case env @? idx of
     Just val -> return val
-    Nothing -> throwError $ UnboundIndex idx
+    Nothing -> throwError $ ObjUnboundIndex idx
   OPi domain codomain -> do
     domainVal <- go domain
-    let closure = Closure env codomain
+    let closure = ObjClosure env codomain
     return $ OVPi domainVal closure
-  OLam body -> return $ OVLam $ Closure env body
+  OLam body -> return $ OVLam $ ObjClosure env body
   OApp fn arg -> do
     fnVal <- go fn
     argVal <- go arg
@@ -40,20 +40,20 @@ evaluateObj tm env = case tm of
     go tm' = evaluateObj tm' env
 
 -- evaluation of meta structures
-evalClosure :: ObjValue -> Closure -> ObjEvalResult ObjValue
-evalClosure arg (Closure env tm) = evaluateObj tm (env |> arg)
+evalClosure :: ObjValue -> ObjClosure -> ObjEvalResult ObjValue
+evalClosure arg (ObjClosure env tm) = evaluateObj tm (env |> arg)
 
-evalClosure' :: (Item l ~ ObjValue, Sequence l) => l -> Closure -> ObjEvalResult ObjValue
-evalClosure' args (Closure env tm) = evaluateObj tm (env >< args)
+evalClosure' :: (Item l ~ ObjValue, Sequence l) => l -> ObjClosure -> ObjEvalResult ObjValue
+evalClosure' args (ObjClosure env tm) = evaluateObj tm (env >< args)
 
-evalClosureFresh :: Closure -> ObjEvalResult (ObjValue, ObjValue)
-evalClosureFresh (Closure env tm) = do
+evalClosureFresh :: ObjClosure -> ObjEvalResult (ObjValue, ObjValue)
+evalClosureFresh (ObjClosure env tm) = do
   let (arg, env') = pushFreshVar' env
   res <- evaluateObj tm env'
   return (res, arg)
 
-evalClosureFreshN :: Int -> Closure -> ObjEvalResult (ObjValue, ObjValueSeq)
-evalClosureFreshN n (Closure env tm) = do
+evalClosureFreshN :: Int -> ObjClosure -> ObjEvalResult (ObjValue, ObjValueSeq)
+evalClosureFreshN n (ObjClosure env tm) = do
   let (args, env') = pushFreshVarN' n env
   res <- evaluateObj tm env'
   return (res, args)
@@ -87,16 +87,16 @@ evalConstraint constr env = case constr of
 -- effect: push evaluated meta def to the environment
 evalMetaDef :: ObjEnv -> MetaDefinition -> ObjEvalMonad VMetaDefinition
 evalMetaDef baseEnv def = case def of
-  Unsolved -> doPushFreshVar >> return VMUnsolved
+  Unsolved -> doPushFreshVar >> return VUnsolved
   Guarded tm constrs -> do
     env <- get
     constrVals <- lift $ seqMapM (`evalConstraint` env) constrs
     _ <- doPushFreshVar
-    return (VMGuarded (Closure baseEnv tm) constrVals)
+    return (VGuarded (ObjClosure baseEnv tm) constrVals)
   MSolved tm -> do
     val <- doEvaluate tm
     doPush val
-    return $ VMSolved $ Closure baseEnv tm
+    return $ VSolved $ ObjClosure baseEnv tm
 
 -- effect: push evaluated signature to the environment
 evalSignature :: Signature -> ObjEvalMonad VSignature
@@ -110,8 +110,8 @@ evalSignature (Sig defs) = do
 evalApp :: ObjValue -> ObjValue -> ObjEvalResult ObjValue
 evalApp fnVal argVal = case fnVal of
   OVLam closure -> evalClosure argVal closure
-  OVNeutral neutral -> returnNeutral $ neutralApp neutral argVal
-  _ -> throwError AppOnNonLambda
+  OVNeutral neutral -> returnNeutral $ objNeutralApp neutral argVal
+  _ -> throwError ObjAppOnNonLambda
 
 -- utils
 doEvaluate :: ObjTerm -> ObjEvalMonad ObjValue

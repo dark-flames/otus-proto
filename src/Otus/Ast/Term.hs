@@ -6,6 +6,7 @@ module Otus.Ast.Term (
   Signature (..),
   ObjTerm (..),
   ObjTermSeq,
+  MetaType (..),
   MetaTerm (..),
 ) where
 
@@ -64,15 +65,18 @@ data ObjTerm
   deriving (Eq, Show)
 
 -- Meta
+data MetaType
+  = MFn MetaType MetaType
+  | MInner Telescope ObjTerm
+  | MDyn MetaType
+  deriving (Eq, Show)
+
 data MetaTerm
   = MVar IndexId
-  | MFn MetaTerm MetaTerm
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
-  | MInner Telescope ObjTerm
-  | MGuarded Telescope Signature Substitution ObjTerm
-  | MDyn MetaTerm
   | MOk MetaTerm
   | MErr
-  | MBind MetaTerm
+  | MBind MetaTerm MetaTerm
+  | MGuarded Telescope Signature Substitution ObjTerm
   deriving (Eq, Show)

@@ -41,7 +41,7 @@ inherent ctx expr asTy stage = case (expr, asTy) of
       WFTerm
         { wfTerm = OLam bodyTm,
           tmStage = stage,
-          ty = OVPi dom (Closure (asEnv ctx) bodyTy)
+          ty = OVPi dom (ObjClosure (asEnv ctx) bodyTy)
         }
   _ -> undefined
 
