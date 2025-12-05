@@ -1,4 +1,7 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Otus.Normalize.Env (
+  Value (..),
   Environment (..),
   envLevel,
   pushFreshVar,
@@ -10,36 +13,39 @@ module Otus.Normalize.Env (
 
 import Otus.Ast
 import Otus.Common
-import Otus.Normalize.Value
 
-newtype Environment = Env ValueSeq
+class Value val where
+  vVar :: LevelId -> val
+
+newtype Environment val = Env (Seq val)
   deriving (Eq, Show)
 
-instance Sequence Environment where
-  type Item Environment = Value
+instance Sequence (Environment val) where
+  type Item (Environment val) = val
 
+  fromList :: [Item (Environment val)] -> Environment val
   fromList = Env . fromList
   toSeq (Env s) = s
   fromSeq = Env
 
-find :: (SeqIndex id) => id -> Environment -> Maybe Value
+find :: (SeqIndex id) => id -> Environment val -> Maybe val
 find idx (Env e) = e @? idx
 
-envLevel :: Environment -> LevelId
+envLevel :: Environment val -> LevelId
 envLevel = LevelId . size
 
-pushFreshVar :: Environment -> Environment
+pushFreshVar :: (Value val) => Environment val -> Environment val
 pushFreshVar = snd . pushFreshVar'
 
-pushFreshVarN :: Int -> Environment -> Environment
+pushFreshVarN :: (Value val) => Int -> Environment val -> Environment val
 pushFreshVarN n env = snd (pushFreshVarN' n env)
 
-pushFreshVar' :: Environment -> (Value, Environment)
+pushFreshVar' :: (Value val) => Environment val -> (val, Environment val)
 pushFreshVar' env =
   let val = (vVar $ LevelId (size env))
   in (val, env |> val)
 
-pushFreshVarN' :: Int -> Environment -> (ValueSeq, Environment)
+pushFreshVarN' :: (Value val) => Int -> Environment val -> (Seq val, Environment val)
 pushFreshVarN' n env =
   let
     base = LevelId (size env)

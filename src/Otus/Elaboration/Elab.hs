@@ -13,16 +13,16 @@ import Otus.Common
 import Otus.Elaboration.Context
 import Otus.Elaboration.Control
 import Otus.Elaboration.Expr
-import Otus.Normalize.Value
+import Otus.Normalize
 
 data WellFormedTerm = WFTerm
-  { wfTerm :: Term,
+  { wfTerm :: ObjTerm,
     tmStage :: Stage,
-    ty :: Value
+    ty :: ObjValue
   }
 
 data WellFormedTy = WFTy
-  { wfTy :: Term,
+  { wfTy :: ObjTerm,
     tyStage :: Stage,
     univLvl :: Universe
   }
@@ -30,18 +30,18 @@ data WellFormedTy = WFTy
 inherentTy :: Context -> Expr -> ElabResult WellFormedTy
 inherentTy = undefined
 
-inherent :: Context -> Expr -> Value -> Stage -> ElabResult WellFormedTerm
+inherent :: Context -> Expr -> ObjValue -> Stage -> ElabResult WellFormedTerm
 inherent ctx expr asTy stage = case (expr, asTy) of
-  (ELam strId body, VPi dom codCls) -> do
+  (ELam strId body, OVPi dom codCls) -> do
     (lvl, ctx') <- tryPushTy strId dom stage ctx
     cod <- doEvalCls (vVar lvl) codCls
     WFTerm bodyTm _ bodyVTy <- inherent ctx' body cod stage
     bodyTy <- doReadback (lvl + 1) bodyVTy
     return
       WFTerm
-        { wfTerm = Lam bodyTm,
+        { wfTerm = OLam bodyTm,
           tmStage = stage,
-          ty = VPi dom (Closure (asEnv ctx) bodyTy)
+          ty = OVPi dom (Closure (asEnv ctx) bodyTy)
         }
   _ -> undefined
 
@@ -51,7 +51,7 @@ synthesis ctx = \case
     Just (idx, vty, stage) ->
       return
         WFTerm
-          { wfTerm = Var idx,
+          { wfTerm = OVar idx,
             tmStage = stage,
             ty = vty
           }
@@ -59,7 +59,7 @@ synthesis ctx = \case
   EApp fun arg -> do
     WFTerm funTm stage fTy <- synthesis ctx fun
     case fTy of
-      VPi dom codCls -> do
+      OVPi dom codCls -> do
         WFTerm argTm stage' _ <- inherent ctx arg dom stage
         if stage' /= stage then
           throwError $ StageError arg stage
@@ -68,10 +68,10 @@ synthesis ctx = \case
           vCod <- doEvalCls vArg codCls
           return
             WFTerm
-              { wfTerm = App funTm argTm,
+              { wfTerm = OApp funTm argTm,
                 tmStage = stage,
                 ty = vCod
               }
-      VNeutral _ -> undefined
+      OVNeutral _ -> undefined
       _ -> undefined
   _ -> undefined

@@ -4,41 +4,42 @@ module Otus.Ast.Term (
   Constraint (..),
   MetaDefinition (..),
   Signature (..),
-  Term (..),
-  TermSeq,
+  ObjTerm (..),
+  ObjTermSeq,
+  MetaTerm (..),
 ) where
 
 import Otus.Ast.Id
 import Otus.Common
 
 -- Telescope
-newtype Telescope = Tele TermSeq
+newtype Telescope = Tele ObjTermSeq
   deriving (Eq, Show)
 
 instance Sequence Telescope where
-  type Item Telescope = Term
+  type Item Telescope = ObjTerm
   fromSeq = Tele
   toSeq (Tele s) = s
 
 -- Substitution
-newtype Substitution = Subst TermSeq
+newtype Substitution = Subst ObjTermSeq
   deriving (Eq, Show)
 
 instance Sequence Substitution where
-  type Item Substitution = Term
+  type Item Substitution = ObjTerm
   fromSeq = Subst
   toSeq (Subst s) = s
 
 -- Signature
 data Constraint
-  = TyEq Telescope Term Term
-  | TmEq Telescope Term Term Term
+  = TyEq Telescope ObjTerm ObjTerm
+  | TmEq Telescope ObjTerm ObjTerm ObjTerm
   deriving (Eq, Show)
 
 data MetaDefinition
-  = MUnsolved
-  | MGuarded Term (Seq Constraint)
-  | MSolved Term
+  = Unsolved
+  | Guarded ObjTerm (Seq Constraint)
+  | MSolved ObjTerm
   deriving (Eq, Show)
 
 newtype Signature = Sig (Seq MetaDefinition)
@@ -49,26 +50,29 @@ instance Sequence Signature where
   fromSeq = Sig
   toSeq (Sig s) = s
 
-type TermSeq = Seq Term
+-- Obj
+type ObjTermSeq = Seq ObjTerm
 
-data Term
-  = Var IndexId
+data ObjTerm
+  = OVar IndexId
   | -- Pi type
-    Pi Term Term
-  | Lam Term
-  | App Term Term
+    OPi ObjTerm ObjTerm
+  | OLam ObjTerm
+  | OApp ObjTerm ObjTerm
   | -- Universe
-    Type Stage Universe
-  | -- Object
-    Dynamic Telescope Term
-  | Ok Substitution Term
-  | TyErr
-  | DBind Term Term
-  | Force Term
-  | -- Meta
-    Local Telescope Telescope Term
-  | Guarded Int Signature Term
-  | Error
-  | Assign Int Signature Term
-  | Open Term Term
+    OType Stage Universe
+  deriving (Eq, Show)
+
+-- Meta
+data MetaTerm
+  = MVar IndexId
+  | MFn MetaTerm MetaTerm
+  | MLam MetaTerm
+  | MApp MetaTerm MetaTerm
+  | MInner Telescope ObjTerm
+  | MGuarded Telescope Signature Substitution ObjTerm
+  | MDyn MetaTerm
+  | MOk MetaTerm
+  | MErr
+  | MBind MetaTerm
   deriving (Eq, Show)

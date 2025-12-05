@@ -1,4 +1,4 @@
-module Otus.Normalize.Solve (
+module Otus.Normalize.Object.Solve (
   solveSignature,
 ) where
 
@@ -9,12 +9,12 @@ import Data.Maybe (fromJust)
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
-import {-# SOURCE #-} Otus.Normalize.Eval
-import Otus.Normalize.Value
+import Otus.Normalize.Object.Eval
+import Otus.Normalize.Object.Value
 
 data CachedClosure
   = Unevaluated Closure
-  | Evaluated Closure Value
+  | Evaluated Closure ObjValue
   deriving (Eq, Show)
 
 asClosure :: CachedClosure -> Closure
@@ -153,12 +153,12 @@ solveConstraint :: VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
 solveConstraint (VTmEq vTele lhs rhs vTy) = solveTmEq vTele (lhs, rhs) vTy
 solveConstraint (VTyEq vTele lhs rhs) = solveTyEq vTele (lhs, rhs)
 
-solveTyEq :: VTelescope -> (Value, Value) -> SolveMonad (Seq VConstraint, SolveResult)
+solveTyEq :: VTelescope -> (ObjValue, ObjValue) -> SolveMonad (Seq VConstraint, SolveResult)
 solveTyEq _ = undefined
 
-solveTmEq :: VTelescope -> (Value, Value) -> Value -> SolveMonad (Seq VConstraint, SolveResult)
+solveTmEq :: VTelescope -> (ObjValue, ObjValue) -> ObjValue -> SolveMonad (Seq VConstraint, SolveResult)
 solveTmEq vTele (lhs, rhs) vty = case vty of
-  VPi vDom codCls -> do
+  OVPi vDom codCls -> do
     (vCod, arg) <- doEvalClsFresh codCls
     vLhs <- doEvalApp lhs arg
     vRhs <- doEvalApp rhs arg
@@ -169,8 +169,8 @@ solveTmEq vTele (lhs, rhs) vty = case vty of
     returnConflict = return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
 
 -- evaluate
-doEvalClsFresh :: Closure -> SolveMonad (Value, Value)
+doEvalClsFresh :: Closure -> SolveMonad (ObjValue, ObjValue)
 doEvalClsFresh cls = lift $ evalClosureFresh cls
 
-doEvalApp :: Value -> Value -> SolveMonad Value
+doEvalApp :: ObjValue -> ObjValue -> SolveMonad ObjValue
 doEvalApp fun arg = lift $ evalApp fun arg

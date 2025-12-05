@@ -1,9 +1,16 @@
 module Otus.Normalize.Value (
-  Value,
+  ObjValue,
+  MetaValue,
 ) where
 
-data Value
+data ObjValue
 
-instance Show Value
+instance Show ObjValue
 
-instance Eq Value
+instance Eq ObjValue
+
+data MetaValue
+
+instance Show MetaValue
+
+instance Eq MetaValue

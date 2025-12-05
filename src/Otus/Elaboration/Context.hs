@@ -13,12 +13,12 @@ import Otus.Common
 import Otus.Normalize
 
 data Context = Context
-  { ctxSegs :: Seq (Value, Stage),
+  { ctxSegs :: Seq (ObjValue, Stage),
     idMap :: Map String LevelId
   }
   deriving (Eq, Show)
 
-pushTy :: String -> Value -> Stage -> Context -> Maybe (LevelId, Context)
+pushTy :: String -> ObjValue -> Stage -> Context -> Maybe (LevelId, Context)
 pushTy strId vTy stage (Context s idM) =
   if member strId idM then
     Nothing
@@ -35,11 +35,11 @@ pushTy strId vTy stage (Context s idM) =
 contains :: String -> Context -> Bool
 contains strId (Context _ idM) = member strId idM
 
-findVTy :: String -> Context -> Maybe (IndexId, Value, Stage)
+findVTy :: String -> Context -> Maybe (IndexId, ObjValue, Stage)
 findVTy strId (Context s idM) = do
   lvl <- idM !? strId
   (val, stage) <- s @? lvl
   return (toIndex s lvl, val, stage)
 
-asEnv :: Context -> Environment
+asEnv :: Context -> ObjEnv
 asEnv (Context s _) = mapWithIndex (\idx _ -> vVar $ LevelId idx) s
