@@ -66,9 +66,9 @@ fromVSig lvl (VSig defs) = Problem lvl $ go lvl defs
   where
     go _ Empty = empty
     go l (def :<| rest) = case def of
-      VMUnsolved -> MSUnknown l <| go (incrLvl l) rest
-      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (incrLvl l) rest
-      VMSolved cls -> MSSolved l (Unevaluated cls) <| go (incrLvl l) rest
+      VMUnsolved -> MSUnknown l <| go (lvl + 1) rest
+      VMGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (lvl + 1) rest
+      VMSolved cls -> MSSolved l (Unevaluated cls) <| go (lvl + 1) rest
 
 toVSig :: Problem -> VSignature
 toVSig (Problem _ states) = VSig $ f <$> states
@@ -164,12 +164,6 @@ solveTmEq vTele (lhs, rhs) vty = case vty of
     vRhs <- doEvalApp rhs arg
     let vTele' = vTele |> vDom
     solveTmEq vTele' (vLhs, vRhs) vCod
-  VNat stage -> case (lhs, rhs) of
-    (VZero _, VZero _) -> return (empty, NoModification)
-    (VSucc lhs', VSucc rhs') -> solveTmEq vTele (lhs', rhs') $ VNat stage
-    (VZero _, VSucc _) -> returnConflict
-    (VSucc _, VZero _) -> returnConflict
-    _ -> undefined
   _ -> returnConflict
   where
     returnConflict = return (singleton $ VTmEq vTele lhs rhs vty, Conflict)

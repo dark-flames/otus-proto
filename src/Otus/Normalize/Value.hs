@@ -4,7 +4,6 @@ module Otus.Normalize.Value (
   VSubstitution (..),
   VConstraint (..),
   VMetaDefinition (..),
-  VMetaView (..),
   VSignature (..),
   Value (..),
   ValueSeq,
@@ -51,11 +50,6 @@ data VMetaDefinition
   | VMSolved Closure
   deriving (Eq, Show)
 
-data VMetaView
-  = UnsolvedMeta
-  | SolvedMeta Value
-  deriving (Eq, Show)
-
 -- signature
 newtype VSignature = VSig (Seq VMetaDefinition)
   deriving (Eq, Show)
@@ -69,7 +63,6 @@ instance Sequence VSignature where
 data Neutral
   = NVar LevelId
   | NApp Neutral ValueSeq
-  | NNatElim Value Value Neutral
   | NDBind Neutral Closure
   | NForce Neutral
   | NForceUnsolved VSignature Closure
@@ -84,9 +77,6 @@ data Value
   = VNeutral Neutral
   | VPi Value Closure
   | VLam Closure
-  | VNat Stage
-  | VZero Stage
-  | VSucc Value
   | VType Stage Universe
   | -- Object
     VDynamic VTelescope Value

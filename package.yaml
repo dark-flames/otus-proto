@@ -36,6 +36,7 @@ default-extensions:
 - ViewPatterns
 - TypeFamilies
 - TypeOperators
+- DerivingVia
 
 library:
   source-dirs: src

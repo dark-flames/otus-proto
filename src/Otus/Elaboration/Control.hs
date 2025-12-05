@@ -4,6 +4,7 @@ module Otus.Elaboration.Control (
   ElabResultT,
   fromEvalResult,
   doEvalCls,
+  doEval,
   doReadback,
   tryPushTy,
 ) where
@@ -13,6 +14,7 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Otus.Ast
 import Otus.Common
 import Otus.Elaboration.Context
+import Otus.Elaboration.Expr
 import Otus.Normalize
 
 data ElabError
@@ -20,6 +22,7 @@ data ElabError
   | UnknownIdentifier String
   | DuplicateBinder String
   | EvalError EvalError
+  | StageError Expr Stage
   deriving (Eq, Show)
 
 type ElabResult = Result ElabError
@@ -31,8 +34,11 @@ fromEvalResult = \case
   Success r -> Success r
   Failure e -> Failure $ EvalError e
 
-doEvalCls :: Closure -> Value -> ElabResult Value
-doEvalCls cls arg = fromEvalResult $ evalClosure arg cls
+doEvalCls :: Value -> Closure -> ElabResult Value
+doEvalCls arg cls = fromEvalResult $ evalClosure arg cls
+
+doEval :: Term -> Context -> ElabResult Value
+doEval tm ctx = fromEvalResult $ evaluate tm (asEnv ctx)
 
 doReadback :: LevelId -> Value -> ElabResult Term
 doReadback lvl val = fromEvalResult $ readback lvl val

@@ -5,7 +5,6 @@ module Otus.Normalize.Eval (
   evalClosureFresh,
   evalClosureFreshN,
   evalApp,
-  evalNatElim,
 ) where
 
 import Control.Exception (assert)
@@ -33,14 +32,6 @@ evaluate tm env = case tm of
     fnVal <- go fn
     argVal <- go arg
     evalApp fnVal argVal
-  Nat s -> return $ VNat s
-  Zero s -> return $ VZero s
-  Succ prev -> VSucc <$> go prev
-  NatElim base step n -> do
-    baseVal <- go base
-    stepVal <- go step
-    nVal <- go n
-    evalNatElim baseVal stepVal nVal
   Type stage univ -> return $ VType stage univ
   -- Object
   Force metaTm -> go metaTm >>= evalForce (envLevel env)
@@ -188,15 +179,6 @@ evalApp fnVal argVal = case fnVal of
 
 evalApp' :: (Item l ~ Value, Sequence l) => Value -> l -> EvalResult Value
 evalApp' = seqFoldlM evalApp
-
-evalNatElim :: Value -> Value -> Value -> EvalResult Value
-evalNatElim baseVal stepVal = \case
-  VZero _ -> return baseVal
-  VSucc prevVal -> do
-    recResVal <- evalNatElim baseVal stepVal prevVal
-    evalApp' stepVal $ asSeq [prevVal, recResVal]
-  VNeutral neutral -> returnNeutral $ NNatElim baseVal stepVal neutral
-  _ -> throwError NatElimOnNonNat
 
 evalDbind :: Value -> Closure -> EvalResult Value
 evalDbind val nextCls = case val of

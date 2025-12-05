@@ -53,6 +53,7 @@ library
       ViewPatterns
       TypeFamilies
       TypeOperators
+      DerivingVia
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       base >=4.20.1.0 && <4.20.2.0

@@ -57,15 +57,6 @@ data Term
     Pi Term Term
   | Lam Term
   | App Term Term
-  | -- Natural numbers
-    Nat Stage
-  | Zero Stage
-  | Succ Term
-  | ---- NatElim : {P : Nat → Set}
-    ---- → P 0
-    ---- → ((n : Nat) → (P n) → P (1 + n))
-    ---- → (m : Nat) → P m
-    NatElim Term Term Term
   | -- Universe
     Type Stage Universe
   | -- Object

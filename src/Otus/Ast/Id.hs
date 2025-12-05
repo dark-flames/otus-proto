@@ -11,7 +11,7 @@ module Otus.Ast.Id (
 import Otus.Common
 
 newtype IndexId = IndexId Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Num, Ord, Show) via Int
 
 instance SeqIndex IndexId where
   shift s (IndexId i) = IndexId $ i - s
@@ -23,7 +23,7 @@ toLevel :: (Sequence l) => l -> IndexId -> LevelId
 toLevel s idx = LevelId $ intoLeftIndex s idx
 
 newtype LevelId = LevelId Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Num, Ord, Show) via Int
 
 instance SeqIndex LevelId where
   shift s (LevelId i) = LevelId $ i + s
