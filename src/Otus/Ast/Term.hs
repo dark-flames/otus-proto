@@ -68,15 +68,12 @@ data ObjTerm
 data MetaType
   = MFn MetaType MetaType
   | MInner Telescope ObjTerm
-  | MDyn MetaType
   deriving (Eq, Show)
 
 data MetaTerm
   = MVar IndexId
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
-  | MOk MetaTerm
-  | MErr
-  | MBind MetaTerm MetaTerm
   | MGuarded Telescope Signature Substitution ObjTerm
+  | MErr
   deriving (Eq, Show)

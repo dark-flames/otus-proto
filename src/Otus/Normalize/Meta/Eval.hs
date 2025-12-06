@@ -4,12 +4,15 @@ module Otus.Normalize.Meta.Eval (
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.State.Lazy (get, lift)
 
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Meta.Error
 import Otus.Normalize.Meta.Value
+import Otus.Normalize.Object.Eval
+import Otus.Normalize.Object.Value
 
 evaluateMeta :: MetaTerm -> MetaEnv -> MetaEvalResult MetaValue
 evaluateMeta tm env = case tm of
@@ -21,13 +24,15 @@ evaluateMeta tm env = case tm of
     vFn <- go fn
     vArg <- go arg
     evalMetaApp vFn vArg
-  MOk inner -> MVOk <$> go inner
+  MGuarded tele sig subst objTerm -> do
+    (vTele, vSig, vSubst) <- evalObjEvalMonad $ do
+      vTele <- evalTelescope tele
+      vSig <- evalSignature sig
+      env' <- get
+      vSubst <- lift $ evalSubstitution subst env'
+      return (vTele, vSig, vSubst)
+    return $ MVConsistent vTele vSig vSubst (ObjClosure empty objTerm)
   MErr -> return MVErr
-  MBind prev handler -> do
-    vPrev <- go prev
-    vHandler <- go handler
-    evalMetaBind vPrev vHandler
-  _ -> undefined
   where
     go tm' = evaluateMeta tm' env
 
@@ -37,8 +42,14 @@ evalMetaType = \case
     vDom <- evalMetaType dom
     vCod <- evalMetaType cod
     return $ MVFn vDom vCod
-  MDyn inner -> MVDyn <$> evalMetaType inner
-  _ -> undefined
+  MInner tele objTy ->
+    uncurry MVInner
+      <$> evalObjEvalMonad
+        ( do
+            vTele <- evalTelescope tele
+            vTy <- doEvaluate objTy
+            return (vTele, vTy)
+        )
 
 evalMetaClosure :: MetaClosure -> MetaValue -> MetaEvalResult MetaValue
 evalMetaClosure (MetaClosure env tm) arg = evaluateMeta tm (env |> arg)
@@ -48,10 +59,3 @@ evalMetaApp vFn vArg = case vFn of
   MVLam cls -> evalMetaClosure cls vArg
   MVNeutral neu -> returnNeutral $ metaNeutralApp neu vArg
   _ -> throwError MetaAppOnNonFn
-
-evalMetaBind :: MetaValue -> MetaValue -> MetaEvalResult MetaValue
-evalMetaBind prev handler = case prev of
-  MVOk vRes -> evalMetaApp handler vRes
-  MVErr -> return MVErr
-  MVNeutral neu -> returnNeutral $ MNBind neu handler
-  _ -> throwError MetaBindOnNonDyn

@@ -10,7 +10,7 @@ module Otus.Normalize.Control (
   evalEvalMonad,
 ) where
 
-import Control.Monad.State.Strict (MonadState (put), StateT (runStateT), evalStateT, gets, modify)
+import Control.Monad.State.Lazy (MonadState (put), StateT (runStateT), evalStateT, gets, modify)
 
 import Otus.Ast
 import Otus.Common

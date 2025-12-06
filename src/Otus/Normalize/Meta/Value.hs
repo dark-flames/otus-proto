@@ -21,7 +21,6 @@ data MetaClosure = MetaClosure MetaEnv MetaTerm
 data MetaNeutral
   = MNVar LevelId
   | MNApp MetaNeutral MetaValueSeq
-  | MNBind MetaNeutral MetaValue
   deriving (Eq, Show)
 
 type MetaValueSeq = Seq MetaValue
@@ -29,13 +28,13 @@ type MetaValueSeq = Seq MetaValue
 data MetaVType
   = MVFn MetaVType MetaVType
   | MVDyn MetaVType
-  | MVInner Telescope ObjValue
+  | MVInner VTelescope ObjValue
   deriving (Eq, Show)
 
 data MetaValue
   = MVNeutral MetaNeutral
   | MVLam MetaClosure
-  | MVOk MetaValue
+  | MVConsistent VTelescope VSignature VSubstitution ObjClosure
   | MVErr
   deriving (Eq, Show)
 

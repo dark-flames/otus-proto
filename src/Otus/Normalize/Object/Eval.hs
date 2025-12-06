@@ -5,6 +5,7 @@ module Otus.Normalize.Object.Eval (
   evalClosureFresh,
   evalClosureFreshN,
   evalApp,
+  evalTelescope,
   evalConstraint,
   evalSignature,
   evalSubstitution,
