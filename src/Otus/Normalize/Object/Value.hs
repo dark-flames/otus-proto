@@ -25,6 +25,9 @@ data ObjClosure = ObjClosure ObjEnv ObjTerm
 newtype VTelescope = VTele ObjValueSeq
   deriving (Eq, Show)
 
+instance SeqSize VTelescope where
+  size (VTele s) = size s
+
 instance Sequence VTelescope where
   type Item VTelescope = ObjValue
   fromSeq = VTele
@@ -33,6 +36,9 @@ instance Sequence VTelescope where
 -- substitution
 newtype VSubstitution = VSubst ObjValueSeq
   deriving (Eq, Show)
+
+instance SeqSize VSubstitution where
+  size (VSubst s) = size s
 
 instance Sequence VSubstitution where
   type Item VSubstitution = ObjValue
@@ -55,6 +61,9 @@ data VMetaDefinition
 -- signature
 newtype VSignature = VSig (Seq VMetaDefinition)
   deriving (Eq, Show)
+
+instance SeqSize VSignature where
+  size (VSig s) = size s
 
 instance Sequence VSignature where
   type Item VSignature = VMetaDefinition

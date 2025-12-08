@@ -6,15 +6,15 @@
   "Empty", 
   infer-rule(
     $$,
-    $isCtx(EmptyCtx())$
+    $wfCtx(EmptyCtx())$
   )
 )
 
 #let ext = Def(
   "Ext", 
   infer-rule(
-    ($isCtx(GCtx())$, $GVdash() isTy(A)$),
-    $isCtx(#GCtx(ext: ($A$, )))$
+    ($wfCtx(GCtx())$, $wfTy(GCtx(), A)$),
+    $wfCtx(#GCtx(ext: ($A$, )))$
   )
 )
 

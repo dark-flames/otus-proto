@@ -9,6 +9,7 @@ module Otus.Normalize.Env (
   pushFreshVar',
   pushFreshVarN',
   find,
+  normalizeEnv,
 ) where
 
 import Otus.Ast
@@ -21,6 +22,9 @@ class Value val where
 
 newtype Environment val = Env (Seq val)
   deriving (Eq, Show)
+
+instance SeqSize (Environment val) where
+  size (Env s) = size s
 
 instance Sequence (Environment val) where
   type Item (Environment val) = val
@@ -54,3 +58,6 @@ pushFreshVarN' n env =
     vals = fromList $ map vVar $ levelRng base n
   in
     (vals, env >< vals)
+
+normalizeEnv :: (SeqSize l, Value val) => l -> Environment val
+normalizeEnv l = pushFreshVarN (size l) empty

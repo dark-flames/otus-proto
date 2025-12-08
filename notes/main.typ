@@ -31,7 +31,9 @@
 
 #include "content/syntax.typ"
 
-= Semantical
+== Judgments
+
+== Well-Formed Context
 
 #import "libs/lib.typ": *;
 
@@ -47,6 +49,8 @@
 #let ctx-figure = def-formatter(mltt.ctx.group, "ctx");
 
 #ctx-figure.content
+
+
 
 #bibliography("bibliography.bib")
 

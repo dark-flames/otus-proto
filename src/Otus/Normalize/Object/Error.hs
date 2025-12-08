@@ -15,6 +15,8 @@ data ObjEvalError
   | ObjUnboundIndex IndexId
   | ObjUnknownMeta LevelId
   | ObjAppOnNonLambda
+  | UnexpectedType ObjValue
+  | ReadbackNonNeuWithNeuTy ObjValue ObjNeutral
   | UnsolvableTmEq VTelescope ObjValue ObjValue ObjValue
   deriving (Eq, Show)
 

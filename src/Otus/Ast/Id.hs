@@ -19,8 +19,8 @@ instance SeqIndex IndexId where
   intoLeftIndex l (IndexId i) = size l - i - 1
   intoRightIndex _ (IndexId i) = i
 
-toLevel :: (Sequence l) => l -> IndexId -> LevelId
-toLevel s idx = LevelId $ intoLeftIndex s idx
+toLevel :: (SeqSize l) => l -> IndexId -> LevelId
+toLevel s idx = LevelId $ intoLeftIndex (size s) idx
 
 newtype LevelId = LevelId Int
   deriving (Eq, Num, Ord, Show) via Int
@@ -31,11 +31,14 @@ instance SeqIndex LevelId where
   intoLeftIndex _ (LevelId i) = i
   intoRightIndex l (LevelId i) = size l - i - 1
 
+instance SeqSize LevelId where
+  size (LevelId lvl) = lvl
+
 incrLvl :: LevelId -> LevelId
 incrLvl = shift 1
 
 levelRng :: LevelId -> Int -> [LevelId]
 levelRng base rng = map (`shift` base) [0 .. rng]
 
-toIndex :: (Sequence l) => l -> LevelId -> IndexId
-toIndex s lvl = IndexId $ intoRightIndex s lvl
+toIndex :: (SeqSize l) => l -> LevelId -> IndexId
+toIndex l lvl = IndexId $ intoRightIndex l lvl

@@ -14,10 +14,6 @@
   $GCtx(ext: ext) ⊢ $
 }
 
-#let isCtx(Ctx) = {
-  $⊢ Ctx$
-}
-
 #let EmptyCtx() = {
   $★$
 }

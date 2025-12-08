@@ -17,6 +17,9 @@ import Otus.Common
 newtype Telescope = Tele ObjTermSeq
   deriving (Eq, Show)
 
+instance SeqSize Telescope where
+  size (Tele s) = size s
+
 instance Sequence Telescope where
   type Item Telescope = ObjTerm
   fromSeq = Tele
@@ -25,6 +28,9 @@ instance Sequence Telescope where
 -- Substitution
 newtype Substitution = Subst ObjTermSeq
   deriving (Eq, Show)
+
+instance SeqSize Substitution where
+  size (Subst s) = size s
 
 instance Sequence Substitution where
   type Item Substitution = ObjTerm
@@ -45,6 +51,9 @@ data MetaDefinition
 
 newtype Signature = Sig (Seq MetaDefinition)
   deriving (Eq, Show)
+
+instance SeqSize Signature where
+  size (Sig s) = size s
 
 instance Sequence Signature where
   type Item Signature = MetaDefinition

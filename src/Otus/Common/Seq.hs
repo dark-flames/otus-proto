@@ -3,6 +3,7 @@ module Otus.Common.Seq (
   Sequence (..),
   SeqIndex (..),
   SeqModify (..),
+  SeqSize (..),
   asSeq,
 ) where
 
@@ -14,7 +15,7 @@ import qualified Data.Sequence as Seq
 -- Sized
 
 -- Seq
-class Sequence l where
+class (SeqSize l) => Sequence l where
   type Item l
 
   fromSeq :: Seq (Item l) -> l
@@ -28,9 +29,6 @@ class Sequence l where
 
   singleton :: Item l -> l
   singleton = fromSeq . Seq.singleton
-
-  size :: l -> Int
-  size = Seq.length . toSeq
 
   (|>) :: l -> Item l -> l
   l |> a = fromSeq (toSeq l Seq.|> a)
@@ -56,6 +54,9 @@ class Sequence l where
   seqFoldlM :: (Monad m) => (a -> Item l -> m a) -> a -> l -> m a
   seqFoldlM f s l = foldlM f s (toSeq l)
 
+instance SeqSize (Seq a) where
+  size = Seq.length
+
 instance Sequence (Seq a) where
   type Item (Seq a) = a
   toSeq = id
@@ -65,8 +66,8 @@ instance Sequence (Seq a) where
 class SeqIndex id where
   shift :: Int -> id -> id
   sub :: id -> id -> Int
-  intoLeftIndex :: (Sequence a) => a -> id -> Int
-  intoRightIndex :: (Sequence a) => a -> id -> Int
+  intoLeftIndex :: (SeqSize l) => l -> id -> Int
+  intoRightIndex :: (SeqSize l) => l -> id -> Int
 
 instance SeqIndex Int where
   shift = (+)
@@ -85,3 +86,9 @@ instance SeqModify (Seq a) where
 
 asSeq :: [a] -> Seq a
 asSeq = fromList
+
+class SeqSize l where
+  size :: l -> Int
+
+instance SeqSize Int where
+  size = id
