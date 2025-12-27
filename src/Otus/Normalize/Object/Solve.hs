@@ -1,176 +1,159 @@
 module Otus.Normalize.Object.Solve (
-  solveSignature,
+  solveProblem,
+  isSolved,
+  solveMeta,
 ) where
 
-import Control.Monad (when)
-import Control.Monad.State.Strict (MonadTrans (lift), StateT (runStateT), gets, modify)
-import Data.Maybe (fromJust)
+import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.State.Lazy (StateT (runStateT), gets, lift, modify)
+import Data.Maybe
 
 import Otus.Ast
 import Otus.Common
+import Otus.Normalize.Control
+import Otus.Normalize.Env
 import Otus.Normalize.Object.Error
 import Otus.Normalize.Object.Eval
 import Otus.Normalize.Object.Value
 
-data CachedClosure
-  = Unevaluated ObjClosure
-  | Evaluated ObjClosure ObjValue
+-- Constraint Solve
+
+data WFProblem = WFProblem
+  { pCtx :: Int,
+    wfProblem :: VProblem
+  }
   deriving (Eq, Show)
 
-asClosure :: CachedClosure -> ObjClosure
-asClosure = \case
-  Unevaluated cls -> cls
-  Evaluated cls _ -> cls
+type SolveEnv = Seq (Maybe ObjValue)
 
-data MetaState
-  = MSUnknown LevelId
-  | MSGuarded LevelId CachedClosure (Seq VConstraint)
-  | MSSolved LevelId CachedClosure
+buildSolveEnv :: Int -> SolveEnv
+buildSolveEnv s = cycleTaking s [Nothing]
+
+findMeta :: LevelId -> SolveMonad (Maybe ObjValue)
+findMeta lvl =
+  gets (@? lvl) >>= \case
+    Just res -> return res
+    Nothing -> throwError $ ObjUnknownMeta lvl
+
+isSolved :: LevelId -> SolveMonad Bool
+isSolved lvl = isJust <$> findMeta lvl
+
+solveMeta :: LevelId -> ObjValue -> SolveMonad ()
+solveMeta lvl val = modify $ update lvl (Just val)
+
+metaSize :: SolveMonad Int
+metaSize = gets size
+
+newtype MetaSubst = MSubst (Seq (Maybe ObjValue))
   deriving (Eq, Show)
-
-type MetaStateSeq = Seq MetaState
-
-data Problem = Problem LevelId MetaStateSeq
-  deriving (Eq, Show)
-
-adjustState :: LevelId -> (MetaState -> MetaState) -> Problem -> Problem
-adjustState idx h (Problem base s) = Problem base $ adjust h (sub idx base) s
-
-type SolveMonad = StateT Problem ObjEvalResult
-
-data SolveResult
-  = NoModification
-  | Modified LevelId
-  | Conflict
-
-instance Semigroup SolveResult where
-  Conflict <> _ = Conflict
-  _ <> Conflict = Conflict
-  NoModification <> r = r
-  l <> NoModification = l
-  Modified lvlL <> Modified lvlR = Modified $ min lvlL lvlR
-
-andThen :: SolveResult -> SolveMonad SolveResult -> SolveMonad SolveResult
-andThen = \case
-  Conflict -> const $ return Conflict
-  NoModification -> id
-  curRes -> fmap (curRes <>)
-
-notConflict :: SolveResult -> Bool
-notConflict = \case
-  Conflict -> False
-  _ -> True
-
-fromVSig :: LevelId -> VSignature -> Problem
-fromVSig lvl (VSig defs) = Problem lvl $ go lvl defs
-  where
-    go _ Empty = empty
-    go l (def :<| rest) = case def of
-      VUnsolved -> MSUnknown l <| go (lvl + 1) rest
-      VGuarded cls constrs -> MSGuarded l (Unevaluated cls) constrs <| go (lvl + 1) rest
-      VSolved cls -> MSSolved l (Unevaluated cls) <| go (lvl + 1) rest
-
-toVSig :: Problem -> VSignature
-toVSig (Problem _ states) = VSig $ f <$> states
-  where
-    f = \case
-      MSUnknown _ -> VUnsolved
-      MSGuarded _ cached constrs -> VGuarded (asClosure cached) constrs
-      MSSolved _ cached -> VSolved (asClosure cached)
 
 -- Control
-getMetaState :: LevelId -> SolveMonad MetaState
-getMetaState lvl = gets (\(Problem base s) -> fromJust $ s @? sub lvl base)
+data SolveResult res
+  = Consistant Bool res
+  | Conflict
+  deriving (Eq, Show)
 
-getBaseLevel :: SolveMonad LevelId
-getBaseLevel = gets (\(Problem base _) -> base)
+instance Functor SolveResult where
+  fmap f = \case
+    Conflict -> Conflict
+    Consistant m r -> Consistant m $ f r
 
-getSize :: SolveMonad Int
-getSize = gets (\(Problem _ s) -> size s)
+instance Applicative SolveResult where
+  pure = Consistant False
 
-assignSolvedMeta :: LevelId -> CachedClosure -> SolveMonad ()
-assignSolvedMeta lvl cls =
-  modify (adjustState lvl (const $ MSSolved lvl cls))
+  Conflict <*> _ = Conflict
+  _ <*> Conflict = Conflict
+  (Consistant mf f) <*> (Consistant ma a) = Consistant (mf || ma) $ f a
 
--- Solve
-solveSignature :: LevelId -> VSignature -> ObjEvalResult (Maybe VSignature)
-solveSignature lvl vSig = do
-  let problem = fromVSig lvl vSig
-  (noConflict, problem') <- runStateT doSolve problem
-  if noConflict then
-    return $ Just $ toVSig problem'
-  else
-    return Nothing
+instance Monad SolveResult where
+  Conflict >>= _ = Conflict
+  Consistant ma r >>= f = case f r of
+    Conflict -> Conflict
+    Consistant mb r' -> Consistant (ma || mb) r'
 
-doSolve :: SolveMonad Bool
-doSolve = notConflict <$> (getBaseLevel >>= go)
-  where
-    -- run solve step from the boundary until no modification
-    go lvl = do
-      r <- solveOnceFrom lvl
-      case r of
-        Modified bound -> go bound
-        _ -> return r
+type SolveMonad = StateT SolveEnv (ObjEvalResultT SolveResult)
 
---- solve defs from the given level once time
-solveOnceFrom :: LevelId -> SolveMonad SolveResult
-solveOnceFrom lvl = getSize >>= go lvl
-  where
-    go _ 0 = return NoModification
-    go l fuel = solveSingle l >>= (`andThen` go (incrLvl l) (fuel - 1))
+runSolveMonad :: SolveMonad a -> SolveEnv -> ObjEvalResult (SolveResult (a, SolveEnv))
+runSolveMonad m env = case runResultT (runStateT m env) of
+  Conflict -> return Conflict
+  Consistant modified (Success r) -> return $ Consistant modified r
+  Consistant _ (Failure e) -> throwError e
 
-solveSingle :: LevelId -> SolveMonad SolveResult
-solveSingle lvl =
-  getMetaState lvl >>= \case
-    MSGuarded _ cls constrs -> do
-      (simplified, res) <- solveConstraints constrs
-      when (null simplified) $ assignSolvedMeta lvl cls
-      return $ res <> Modified lvl
-    _ -> return NoModification
-
-solveConstraints :: Seq VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
-solveConstraints constrs = do
-  (simplified, res) <- solveConstraintsOnce constrs
-  case res of
-    Modified _ -> do
-      (simplified', res') <- solveConstraints simplified
-      return (simplified', res <> res')
-    _ -> return (simplified, res)
-
---- solve given constraints
---- effect: update previous meta state if any meta was solved
-solveConstraintsOnce :: Seq VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
-solveConstraintsOnce = seqFoldlM go (empty, NoModification)
-  where
-    go (simplified, res) constr =
-      if notConflict res then do
-        (constrs, res') <- solveConstraint constr
-        return (simplified >< constrs, res <> res')
-      else
-        return (simplified |> constr, res)
-
-solveConstraint :: VConstraint -> SolveMonad (Seq VConstraint, SolveResult)
-solveConstraint (VTmEq vTele lhs rhs vTy) = solveTmEq vTele (lhs, rhs) vTy
-solveConstraint (VTyEq vTele lhs rhs) = solveTyEq vTele (lhs, rhs)
-
-solveTyEq :: VTelescope -> (ObjValue, ObjValue) -> SolveMonad (Seq VConstraint, SolveResult)
-solveTyEq _ = undefined
-
-solveTmEq :: VTelescope -> (ObjValue, ObjValue) -> ObjValue -> SolveMonad (Seq VConstraint, SolveResult)
-solveTmEq vTele (lhs, rhs) vty = case vty of
-  OVPi vDom codCls -> do
-    (vCod, arg) <- doEvalClsFresh codCls
-    vLhs <- doEvalApp lhs arg
-    vRhs <- doEvalApp rhs arg
-    let vTele' = vTele |> vDom
-    solveTmEq vTele' (vLhs, vRhs) vCod
-  _ -> returnConflict
-  where
-    returnConflict = return (singleton $ VTmEq vTele lhs rhs vty, Conflict)
-
--- evaluate
-doEvalClsFresh :: ObjClosure -> SolveMonad (ObjValue, ObjValue)
-doEvalClsFresh cls = lift $ evalClosureFresh cls
+liftEvalResult :: ObjEvalResult a -> SolveMonad a
+liftEvalResult eval = lift $ ResultT (pure eval)
 
 doEvalApp :: ObjValue -> ObjValue -> SolveMonad ObjValue
-doEvalApp fun arg = lift $ evalApp fun arg
+doEvalApp fn arg = liftEvalResult $ evalApp fn arg
+
+doEvalClosure :: ObjValue -> ObjClosure -> SolveMonad ObjValue
+doEvalClosure arg cls = liftEvalResult $ evalClosure arg cls
+
+conflict :: SolveMonad a
+conflict = lift $ ResultT Conflict
+
+type ConstraintSeq = Seq VConstraint
+
+solveProblem :: WFProblem -> ObjEvalResult (Maybe (WFProblem, VRecord))
+solveProblem (WFProblem domainSize (VProb constrSet)) = do
+  res <- runSolveMonad (solveConstraintSet constrSet) (buildSolveEnv domainSize)
+  case res of
+    Conflict -> return Nothing
+    Consistant _ _constrSet' -> undefined
+
+solveConstraintSet :: ConstraintSeq -> SolveMonad ConstraintSeq
+solveConstraintSet = seqMAppendM solveConstraint
+
+solveConstraint :: VConstraint -> SolveMonad ConstraintSeq
+solveConstraint (VTmEq ctxSize lhs rhs) = solveTmEqConstraint ctxSize lhs rhs
+
+solveTmEqConstraint :: Int -> ObjValue -> ObjValue -> SolveMonad ConstraintSeq
+solveTmEqConstraint ctxSize lhs rhs = do
+  lhs' <- force lhs
+  rhs' <- force rhs
+  case (lhs', rhs') of
+    (OVPi lDom lCls, OVPi rDom rCls) -> do
+      domEq <- solveTmEqConstraint ctxSize lDom rDom
+      bind <- freshBind
+      lCod <- doEvalClosure bind lCls
+      rCod <- doEvalClosure bind rCls
+      codEq <- solveTmEqConstraint (ctxSize + 1) lCod rCod
+      return $ domEq >< codEq
+    (OVType, OVType) -> return empty
+    (OVNeutral (ONRigid lh ls), OVNeutral (ONRigid rh rs)) ->
+      if lh == rh then
+        unifySpine ctxSize ls rs
+      else
+        return $ singleton $ VTmEq ctxSize lhs rhs
+    (OVLam lCls, _) -> do
+      bind <- freshBind
+      lBody <- doEvalClosure bind lCls
+      rBody <- doEvalApp rhs' bind
+      solveTmEqConstraint (ctxSize + 1) lBody rBody
+    (_, OVLam rCls) -> do
+      bind <- freshBind
+      lBody <- doEvalApp lhs' bind
+      rBody <- doEvalClosure bind rCls
+      solveTmEqConstraint (ctxSize + 1) lBody rBody
+    _ -> throwError $ UnsolvableTmEq ctxSize lhs rhs
+  where
+    freshBind :: SolveMonad ObjValue
+    freshBind = (vVar . LevelId) . shift ctxSize <$> metaSize
+
+force :: ObjValue -> SolveMonad ObjValue
+force = \case
+  OVNeutral neu -> case neu of
+    ONFlex lvl spine ->
+      findMeta lvl >>= \case
+        Just val -> liftEvalResult $ evalApp' val spine
+        _ -> returnNeutral neu
+    _ -> returnNeutral neu
+  val -> return val
+
+unifySpine :: Int -> ObjValueSeq -> ObjValueSeq -> SolveMonad ConstraintSeq
+unifySpine ctxSize ls rs = case (ls, rs) of
+  (Empty, Empty) -> return empty
+  (lhs :<| ls', rhs :<| rs') -> do
+    c <- solveTmEqConstraint ctxSize lhs rhs
+    cs <- unifySpine ctxSize ls' rs'
+    return $ c >< cs
+  _ -> conflict

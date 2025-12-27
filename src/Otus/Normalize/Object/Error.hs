@@ -17,7 +17,7 @@ data ObjEvalError
   | ObjAppOnNonLambda
   | UnexpectedType ObjValue
   | ReadbackNonNeuWithNeuTy ObjValue ObjNeutral
-  | UnsolvableTmEq VTelescope ObjValue ObjValue ObjValue
+  | UnsolvableTmEq Int ObjValue ObjValue
   deriving (Eq, Show)
 
 type ObjEvalResult = Result ObjEvalError

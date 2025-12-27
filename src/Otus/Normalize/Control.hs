@@ -36,7 +36,7 @@ doFind idx = gets $ find idx
 doGetEnvLevel :: EvalMonad val err LevelId
 doGetEnvLevel = gets envLevel
 
-returnNeutral :: (Value val) => Neutral val -> Result err val
+returnNeutral :: (Monad m, Value val) => Neutral val -> m val
 returnNeutral = return . fromNeutral
 
 runEvalMonad :: EvalMonad err val a -> Environment val -> Result err (a, Environment val)

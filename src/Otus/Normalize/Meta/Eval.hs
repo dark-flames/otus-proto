@@ -4,15 +4,16 @@ module Otus.Normalize.Meta.Eval (
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
-import Control.Monad.State.Lazy (get, lift)
 
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Meta.Error
 import Otus.Normalize.Meta.Value
-import Otus.Normalize.Object.Eval
-import Otus.Normalize.Object.Value
+import Otus.Normalize.Object
+
+buildObjEnv :: Int -> ObjEnv
+buildObjEnv s = seqMap (\lvl -> OVNeutral $ ONFlex (LevelId lvl) empty) $ asSeq [0 .. s]
 
 evaluateMeta :: MetaTerm -> MetaEnv -> MetaEvalResult MetaValue
 evaluateMeta tm env = case tm of
@@ -24,14 +25,10 @@ evaluateMeta tm env = case tm of
     vFn <- go fn
     vArg <- go arg
     evalMetaApp vFn vArg
-  MGuarded tele sig subst objTerm -> do
-    (vTele, vSig, vSubst) <- evalObjEvalMonad $ do
-      vTele <- evalTelescope tele
-      vSig <- evalSignature sig
-      env' <- get
-      vSubst <- lift $ evalSubstitution subst env'
-      return (vTele, vSig, vSubst)
-    return $ MVConsistent vTele vSig vSubst (ObjClosure empty objTerm)
+  MGuarded domainSize problem subst -> do
+    let objEnv = buildObjEnv domainSize
+    vProblem <- fromObjResult $ evalProblem problem objEnv
+    return $ MVConsistent domainSize vProblem subst
   MErr -> return MVErr
   where
     go tm' = evaluateMeta tm' env
@@ -42,14 +39,7 @@ evalMetaType = \case
     vDom <- evalMetaType dom
     vCod <- evalMetaType cod
     return $ MVFn vDom vCod
-  MInner tele objTy ->
-    uncurry MVInner
-      <$> evalObjEvalMonad
-        ( do
-            vTele <- evalTelescope tele
-            vTy <- doEvaluate objTy
-            return (vTele, vTy)
-        )
+  MInner tele -> MVInner <$> evalObjEvalMonad (evalTelescope tele)
 
 evalMetaClosure :: MetaClosure -> MetaValue -> MetaEvalResult MetaValue
 evalMetaClosure (MetaClosure env tm) arg = evaluateMeta tm (env |> arg)

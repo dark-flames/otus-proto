@@ -54,6 +54,12 @@ class (SeqSize l) => Sequence l where
   seqFoldlM :: (Monad m) => (a -> Item l -> m a) -> a -> l -> m a
   seqFoldlM f s l = foldlM f s (toSeq l)
 
+  seqMAppendM :: (Monad m, Monoid a) => (Item l -> m a) -> l -> m a
+  seqMAppendM f = seqFoldlM (\c l -> mappend c <$> f l) mempty
+
+  cycleTaking :: Int -> [Item l] -> l
+  cycleTaking s = fromSeq . Seq.cycleTaking s . fromList
+
 instance SeqSize (Seq a) where
   size = Seq.length
 
@@ -77,12 +83,12 @@ instance SeqIndex Int where
 
 -- modify
 class (Sequence l) => SeqModify l where
-  adjust :: (Item l -> Item l) -> Int -> l -> l
-  update :: Int -> Item l -> l -> l
+  adjust :: (SeqIndex id) => (Item l -> Item l) -> id -> l -> l
+  update :: (SeqIndex id) => id -> Item l -> l -> l
 
 instance SeqModify (Seq a) where
-  adjust = Seq.adjust
-  update = Seq.update
+  adjust f idx l = Seq.adjust f (intoLeftIndex l idx) l
+  update idx v l = Seq.update (intoLeftIndex l idx) v l
 
 asSeq :: [a] -> Seq a
 asSeq = fromList

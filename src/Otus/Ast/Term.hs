@@ -1,9 +1,8 @@
 module Otus.Ast.Term (
   Telescope (..),
-  Substitution (..),
+  Record (..),
   Constraint (..),
-  MetaDefinition (..),
-  Signature (..),
+  Problem (..),
   ObjTerm (..),
   ObjTermSeq,
   MetaType (..),
@@ -26,37 +25,30 @@ instance Sequence Telescope where
   toSeq (Tele s) = s
 
 -- Substitution
-newtype Substitution = Subst ObjTermSeq
+newtype Record = Record ObjTermSeq
   deriving (Eq, Show)
 
-instance SeqSize Substitution where
-  size (Subst s) = size s
+instance SeqSize Record where
+  size (Record s) = size s
 
-instance Sequence Substitution where
-  type Item Substitution = ObjTerm
-  fromSeq = Subst
-  toSeq (Subst s) = s
+instance Sequence Record where
+  type Item Record = ObjTerm
+  fromSeq = Record
+  toSeq (Record s) = s
 
 -- Signature
 data Constraint
-  = TyEq Telescope ObjTerm ObjTerm
-  | TmEq Telescope ObjTerm ObjTerm ObjTerm
+  = TmEq Int ObjTerm ObjTerm
   deriving (Eq, Show)
 
-data MetaDefinition
-  = Unsolved
-  | Guarded ObjTerm (Seq Constraint)
-  | MSolved ObjTerm
+newtype Problem = Sig (Seq Constraint)
   deriving (Eq, Show)
 
-newtype Signature = Sig (Seq MetaDefinition)
-  deriving (Eq, Show)
-
-instance SeqSize Signature where
+instance SeqSize Problem where
   size (Sig s) = size s
 
-instance Sequence Signature where
-  type Item Signature = MetaDefinition
+instance Sequence Problem where
+  type Item Problem = Constraint
   fromSeq = Sig
   toSeq (Sig s) = s
 
@@ -65,24 +57,25 @@ type ObjTermSeq = Seq ObjTerm
 
 data ObjTerm
   = OVar IndexId
+  | OMeta IndexId
   | -- Pi type
     OPi ObjTerm ObjTerm
   | OLam ObjTerm
   | OApp ObjTerm ObjTerm
   | -- Universe
-    OType Stage Universe
+    OType
   deriving (Eq, Show)
 
 -- Meta
 data MetaType
   = MFn MetaType MetaType
-  | MInner Telescope ObjTerm
+  | MInner Telescope
   deriving (Eq, Show)
 
 data MetaTerm
   = MVar IndexId
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
-  | MGuarded Telescope Signature Substitution ObjTerm
+  | MGuarded Int Problem Record
   | MErr
   deriving (Eq, Show)

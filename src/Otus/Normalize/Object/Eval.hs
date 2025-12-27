@@ -5,15 +5,16 @@ module Otus.Normalize.Object.Eval (
   evalClosureFresh,
   evalClosureFreshN,
   evalApp,
+  evalApp',
   evalTelescope,
   evalConstraint,
-  evalSignature,
+  evalProblem,
   evalSubstitution,
   doEvaluate,
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
-import Control.Monad.State.Strict (get, lift)
+import Control.Monad.State.Lazy (get, lift)
 
 import Otus.Ast
 import Otus.Common
@@ -27,6 +28,9 @@ evaluateObj tm env = case tm of
   OVar idx -> case env @? idx of
     Just val -> return val
     Nothing -> throwError $ ObjUnboundIndex idx
+  OMeta idx -> case env @? idx of
+    Just val -> return val
+    Nothing -> throwError $ ObjUnboundIndex idx
   OPi domain codomain -> do
     domainVal <- go domain
     let closure = ObjClosure env codomain
@@ -36,7 +40,7 @@ evaluateObj tm env = case tm of
     fnVal <- go fn
     argVal <- go arg
     evalApp fnVal argVal
-  OType stage univ -> return $ OVType stage univ
+  OType -> return OVType
   where
     go tm' = evaluateObj tm' env
 
@@ -68,44 +72,19 @@ evalTelescope (Tele tys) = seqMapM go tys
       _ <- doPushFreshVar
       return vty
 
-evalSubstitution :: Substitution -> ObjEnv -> ObjEvalResult VSubstitution
-evalSubstitution (Subst tms) env = seqMapM (`evaluateObj` env) tms
+evalSubstitution :: Record -> ObjEnv -> ObjEvalResult VRecord
+evalSubstitution (Record tms) env = seqMapM (`evaluateObj` env) tms
 
 evalConstraint :: Constraint -> ObjEnv -> ObjEvalResult VConstraint
 evalConstraint constr env = case constr of
-  TyEq tele lhs rhs -> do
-    (vTele, env') <- runEvalMonad (evalTelescope tele) env
+  TmEq ctxSize lhs rhs -> do
+    let env' = pushFreshVarN ctxSize env
     vLhs <- evaluateObj lhs env'
     vRhs <- evaluateObj rhs env'
-    return $ VTyEq vTele vLhs vRhs
-  TmEq tele lhs rhs ty -> do
-    (vTele, env') <- runEvalMonad (evalTelescope tele) env
-    vLhs <- evaluateObj lhs env'
-    vRhs <- evaluateObj rhs env'
-    vTy <- evaluateObj ty env'
-    return $ VTmEq vTele vLhs vRhs vTy
+    return $ VTmEq ctxSize vLhs vRhs
 
--- effect: push evaluated meta def to the environment
-evalMetaDef :: ObjEnv -> MetaDefinition -> ObjEvalMonad VMetaDefinition
-evalMetaDef baseEnv def = case def of
-  Unsolved -> doPushFreshVar >> return VUnsolved
-  Guarded tm constrs -> do
-    env <- get
-    constrVals <- lift $ seqMapM (`evalConstraint` env) constrs
-    _ <- doPushFreshVar
-    return (VGuarded (ObjClosure baseEnv tm) constrVals)
-  MSolved tm -> do
-    val <- doEvaluate tm
-    doPush val
-    return $ VSolved $ ObjClosure baseEnv tm
-
--- effect: push evaluated signature to the environment
-evalSignature :: Signature -> ObjEvalMonad VSignature
-evalSignature (Sig defs) = do
-  env <- get
-  seqMapM (evalMetaDef env) defs
-
--- staging
+evalProblem :: Problem -> ObjEnv -> ObjEvalResult VProblem
+evalProblem (Sig defs) env = seqMapM (`evalConstraint` env) defs
 
 -- evaluation of eliminations
 evalApp :: ObjValue -> ObjValue -> ObjEvalResult ObjValue
@@ -113,6 +92,9 @@ evalApp fnVal argVal = case fnVal of
   OVLam closure -> evalClosure argVal closure
   OVNeutral neutral -> returnNeutral $ objNeutralApp neutral argVal
   _ -> throwError ObjAppOnNonLambda
+
+evalApp' :: (Item l ~ ObjValue, Sequence l) => ObjValue -> l -> ObjEvalResult ObjValue
+evalApp' = seqFoldlM evalApp
 
 -- utils
 doEvaluate :: ObjTerm -> ObjEvalMonad ObjValue

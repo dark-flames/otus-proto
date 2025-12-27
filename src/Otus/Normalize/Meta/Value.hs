@@ -28,13 +28,13 @@ type MetaValueSeq = Seq MetaValue
 data MetaVType
   = MVFn MetaVType MetaVType
   | MVDyn MetaVType
-  | MVInner VTelescope ObjValue
+  | MVInner VTelescope
   deriving (Eq, Show)
 
 data MetaValue
   = MVNeutral MetaNeutral
   | MVLam MetaClosure
-  | MVConsistent VTelescope VSignature VSubstitution ObjClosure
+  | MVConsistent Int VProblem Record
   | MVErr
   deriving (Eq, Show)
 

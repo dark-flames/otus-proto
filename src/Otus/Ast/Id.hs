@@ -37,8 +37,8 @@ instance SeqSize LevelId where
 incrLvl :: LevelId -> LevelId
 incrLvl = shift 1
 
-levelRng :: LevelId -> Int -> [LevelId]
-levelRng base rng = map (`shift` base) [0 .. rng]
+levelRng :: LevelId -> Int -> Seq LevelId
+levelRng base rng = seqMap (`shift` base) $ asSeq [0 .. rng]
 
 toIndex :: (SeqSize l) => l -> LevelId -> IndexId
 toIndex l lvl = IndexId $ intoRightIndex l lvl

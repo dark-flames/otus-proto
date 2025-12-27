@@ -2,10 +2,9 @@ module Otus.Normalize.Object.Value (
   ObjEnv,
   ObjClosure (..),
   VTelescope (..),
-  VSubstitution (..),
+  VRecord (..),
   VConstraint (..),
-  VMetaDefinition (..),
-  VSignature (..),
+  VProblem (..),
   ObjValue (..),
   ObjValueSeq,
   ObjNeutral (..),
@@ -34,46 +33,38 @@ instance Sequence VTelescope where
   toSeq (VTele s) = s
 
 -- substitution
-newtype VSubstitution = VSubst ObjValueSeq
+newtype VRecord = VRecord ObjValueSeq
   deriving (Eq, Show)
 
-instance SeqSize VSubstitution where
-  size (VSubst s) = size s
+instance SeqSize VRecord where
+  size (VRecord s) = size s
 
-instance Sequence VSubstitution where
-  type Item VSubstitution = ObjValue
-  fromSeq = VSubst
-  toSeq (VSubst s) = s
+instance Sequence VRecord where
+  type Item VRecord = ObjValue
+  fromSeq = VRecord
+  toSeq (VRecord s) = s
 
 -- constraint
 data VConstraint
-  = VTyEq VTelescope ObjValue ObjValue
-  | VTmEq VTelescope ObjValue ObjValue ObjValue
-  deriving (Eq, Show)
-
--- meta definition
-data VMetaDefinition
-  = VUnsolved
-  | VGuarded ObjClosure (Seq VConstraint)
-  | VSolved ObjClosure
+  = VTmEq Int ObjValue ObjValue
   deriving (Eq, Show)
 
 -- signature
-newtype VSignature = VSig (Seq VMetaDefinition)
+newtype VProblem = VProb (Seq VConstraint)
   deriving (Eq, Show)
 
-instance SeqSize VSignature where
-  size (VSig s) = size s
+instance SeqSize VProblem where
+  size (VProb s) = size s
 
-instance Sequence VSignature where
-  type Item VSignature = VMetaDefinition
-  fromSeq = VSig
-  toSeq (VSig s) = s
+instance Sequence VProblem where
+  type Item VProblem = VConstraint
+  fromSeq = VProb
+  toSeq (VProb s) = s
 
 -- neutral
 data ObjNeutral
-  = ONVar LevelId
-  | ONApp ObjNeutral ObjValueSeq
+  = ONFlex LevelId ObjValueSeq
+  | ONRigid LevelId ObjValueSeq
   deriving (Eq, Show)
 
 -- value
@@ -83,15 +74,15 @@ data ObjValue
   = OVNeutral ObjNeutral
   | OVPi ObjValue ObjClosure
   | OVLam ObjClosure
-  | OVType Stage Universe
+  | OVType
   deriving (Eq, Show)
 
 instance Value ObjValue where
   type Neutral ObjValue = ObjNeutral
-  vVar lvl = OVNeutral $ ONVar lvl
+  vVar lvl = OVNeutral $ ONFlex lvl empty
   fromNeutral = OVNeutral
 
 objNeutralApp :: ObjNeutral -> ObjValue -> ObjNeutral
 objNeutralApp n arg = case n of
-  ONApp h args -> ONApp h (arg <| args)
-  _ -> ONApp n $ singleton arg
+  ONFlex h args -> ONFlex h (args |> arg)
+  ONRigid h args -> ONRigid h (args |> arg)

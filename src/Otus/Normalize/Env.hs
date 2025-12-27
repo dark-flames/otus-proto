@@ -18,6 +18,8 @@ import Otus.Common
 class Value val where
   type Neutral val
   vVar :: LevelId -> val
+  vVars :: (Item l ~ LevelId, Item r ~ val, Sequence l, Sequence r) => l -> r
+  vVars = seqMap vVar
   fromNeutral :: Neutral val -> val
 
 newtype Environment val = Env (Seq val)
@@ -55,7 +57,7 @@ pushFreshVarN' :: (Value val) => Int -> Environment val -> (Seq val, Environment
 pushFreshVarN' n env =
   let
     base = LevelId (size env)
-    vals = fromList $ map vVar $ levelRng base n
+    vals = vVars $ levelRng base n
   in
     (vals, env >< vals)
 
