@@ -8,12 +8,13 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
+import Otus.Normalize.Env (Environment (eempty, pushFreshVarN'))
 import Otus.Normalize.Meta.Error
 import Otus.Normalize.Meta.Value
 import Otus.Normalize.Object
 
 buildObjEnv :: Int -> ObjEnv
-buildObjEnv s = seqMap (\lvl -> OVNeutral $ ONFlex (LevelId lvl) empty) $ asSeq [0 .. s]
+buildObjEnv s = pushFreshVarN' s eempty
 
 evaluateMeta :: MetaTerm -> MetaEnv -> MetaEvalResult MetaValue
 evaluateMeta tm env = case tm of

@@ -57,7 +57,7 @@ type ObjTermSeq = Seq ObjTerm
 
 data ObjTerm
   = OVar IndexId
-  | OMeta IndexId
+  | OMeta MetaId
   | -- Pi type
     OPi ObjTerm ObjTerm
   | OLam ObjTerm

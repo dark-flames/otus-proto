@@ -16,31 +16,31 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Env
 
-type EvalMonad err val = StateT (Environment val) (Result err)
+type EvalMonad err env = StateT env (Result err)
 
-doPush :: val -> EvalMonad err val ()
-doPush val = modify (|> val)
+doPush :: (Environment env) => Element env -> EvalMonad err env ()
+doPush val = modify (push val)
 
-returnAndPush :: val -> EvalMonad err val val
+returnAndPush :: (Environment env) => Element env -> EvalMonad err env (Element env)
 returnAndPush val = doPush val >> return val
 
-doPushFreshVar :: (Value val) => EvalMonad err val val
+doPushFreshVar :: (Environment env) => EvalMonad err env (Element env)
 doPushFreshVar = do
-  (val, env) <- gets pushFreshVar'
+  (val, env) <- gets pushFreshVar
   put env
   return val
 
-doFind :: (SeqIndex id) => id -> EvalMonad err val (Maybe val)
+doFind :: (Environment env, SeqIndex id) => id -> EvalMonad err env (Maybe (Element env))
 doFind idx = gets $ find idx
 
-doGetEnvLevel :: EvalMonad val err LevelId
+doGetEnvLevel :: (Environment env) => EvalMonad err env LevelId
 doGetEnvLevel = gets envLevel
 
 returnNeutral :: (Monad m, Value val) => Neutral val -> m val
 returnNeutral = return . fromNeutral
 
-runEvalMonad :: EvalMonad err val a -> Environment val -> Result err (a, Environment val)
+runEvalMonad :: EvalMonad err env a -> env -> Result err (a, env)
 runEvalMonad = runStateT
 
-evalEvalMonad :: EvalMonad err val a -> Environment val -> Result err a
+evalEvalMonad :: EvalMonad err env a -> env -> Result err a
 evalEvalMonad = evalStateT

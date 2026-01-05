@@ -42,6 +42,9 @@ class (SeqSize l) => Sequence l where
   (@?) :: (SeqIndex id) => l -> id -> Maybe (Item l)
   l @? idx = toSeq l Seq.!? intoLeftIndex l idx
 
+  index :: l -> Int -> Item l
+  index l = Seq.index (toSeq l)
+
   mapWithIndex :: (Sequence t) => (Int -> Item l -> Item t) -> l -> t
   mapWithIndex f l = fromSeq $ mapWithIndex f (toSeq l)
 

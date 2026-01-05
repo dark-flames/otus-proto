@@ -13,7 +13,7 @@ import Otus.Normalize.Object.Value
 data ObjEvalError
   = ObjAnyhow String
   | ObjUnboundIndex IndexId
-  | ObjUnknownMeta LevelId
+  | ObjUnknownMeta MetaId
   | ObjAppOnNonLambda
   | UnexpectedType ObjValue
   | ReadbackNonNeuWithNeuTy ObjValue ObjNeutral
@@ -24,4 +24,4 @@ type ObjEvalResult = Result ObjEvalError
 
 type ObjEvalResultT = ResultT ObjEvalError
 
-type ObjEvalMonad = EvalMonad ObjEvalError ObjValue
+type ObjEvalMonad = EvalMonad ObjEvalError ObjEnv

@@ -13,7 +13,23 @@ import Otus.Common
 import Otus.Normalize.Env
 import Otus.Normalize.Object.Value
 
-type MetaEnv = Environment MetaValue
+newtype MetaEnv = MetaEnv MetaValueSeq
+  deriving (Eq, Show)
+
+instance SeqSize MetaEnv where
+  size (MetaEnv s) = size s
+
+instance Sequence MetaEnv where
+  type Item MetaEnv = MetaValue
+  fromSeq = MetaEnv
+  toSeq (MetaEnv s) = s
+
+instance Environment MetaEnv where
+  type Element MetaEnv = MetaValue
+  eempty = empty
+  find idx env = env @? idx
+  envLevel = LevelId . size
+  pushN l env = env >< l
 
 data MetaClosure = MetaClosure MetaEnv MetaTerm
   deriving (Eq, Show)

@@ -1,11 +1,16 @@
 module Otus.Normalize.Object.Value (
-  ObjEnv,
+  MetaEntry (..),
+  MetaContext (..),
+  solveMeta,
+  buildMetaCtx,
+  ObjEnv (..),
+  findMeta,
   ObjClosure (..),
   VTelescope (..),
   VRecord (..),
   VConstraint (..),
   VProblem (..),
-  ObjValue (..),
+  ObjValue (.., OVVar, OVMeta),
   ObjValueSeq,
   ObjNeutral (..),
   objNeutralApp,
@@ -15,7 +20,50 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Env
 
-type ObjEnv = Environment ObjValue
+data MetaEntry
+  = Solved ObjValue
+  | UnSolved
+  deriving (Eq, Show)
+
+newtype MetaContext = MetaCtx (Seq MetaEntry)
+  deriving (Eq, Show)
+
+instance SeqSize MetaContext where
+  size (MetaCtx s) = size s
+
+instance Sequence MetaContext where
+  type Item MetaContext = MetaEntry
+  fromSeq = MetaCtx
+  toSeq (MetaCtx s) = s
+
+instance SeqModify MetaContext where
+  adjust f idx l = adjust f (intoLeftIndex l idx) l
+  update idx v l = update (intoLeftIndex l idx) v l
+
+solveMeta :: MetaId -> ObjValue -> MetaContext -> MetaContext
+solveMeta m val = update (unMeta m) (Solved val)
+
+buildMetaCtx :: Int -> MetaContext
+buildMetaCtx n = cycleTaking n [UnSolved]
+
+data ObjEnv = ObjEnv
+  { metaEnv :: MetaContext,
+    varEnv :: ObjValueSeq
+  }
+  deriving (Eq, Show)
+
+instance SeqSize ObjEnv where
+  size = size . varEnv
+
+instance Environment ObjEnv where
+  type Element ObjEnv = ObjValue
+  eempty = ObjEnv empty empty
+  find idx env = varEnv env @? idx
+  envLevel = LevelId . size
+  pushN vals (ObjEnv menv venv) = ObjEnv menv (venv >< vals)
+
+findMeta :: MetaId -> ObjEnv -> Maybe MetaEntry
+findMeta m env = metaEnv env @? unMeta m
 
 data ObjClosure = ObjClosure ObjEnv ObjTerm
   deriving (Eq, Show)
@@ -63,7 +111,7 @@ instance Sequence VProblem where
 
 -- neutral
 data ObjNeutral
-  = ONFlex LevelId ObjValueSeq
+  = ONFlex MetaId ObjValueSeq
   | ONRigid LevelId ObjValueSeq
   deriving (Eq, Show)
 
@@ -77,9 +125,15 @@ data ObjValue
   | OVType
   deriving (Eq, Show)
 
+pattern OVVar :: LevelId -> ObjValue
+pattern OVVar lvl = OVNeutral (ONRigid lvl Empty)
+
+pattern OVMeta :: MetaId -> ObjValue
+pattern OVMeta m = OVNeutral (ONFlex m Empty)
+
 instance Value ObjValue where
   type Neutral ObjValue = ObjNeutral
-  vVar lvl = OVNeutral $ ONFlex lvl empty
+  vVar lvl = OVNeutral $ ONRigid lvl empty
   fromNeutral = OVNeutral
 
 objNeutralApp :: ObjNeutral -> ObjValue -> ObjNeutral

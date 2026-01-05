@@ -6,7 +6,7 @@ module Otus.Elaboration.Context (
   asEnv,
 ) where
 
-import Data.Map
+import Data.Map (Map, insert, member, (!?))
 
 import Otus.Ast
 import Otus.Common
@@ -42,4 +42,8 @@ findVTy strId (Context s idM) = do
   return (toIndex s lvl, val, stage)
 
 asEnv :: Context -> ObjEnv
-asEnv (Context s _) = mapWithIndex (\idx _ -> vVar $ LevelId idx) s
+asEnv (Context s _) =
+  ObjEnv
+    { metaEnv = empty,
+      varEnv = mapWithIndex (\idx _ -> vVar $ LevelId idx) s
+    }

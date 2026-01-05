@@ -13,7 +13,7 @@ import Otus.Normalize.Object.Value
 readbackNeutral :: LevelId -> ObjNeutral -> ObjEvalResult ObjTerm
 readbackNeutral ctx = \case
   ONRigid lvl spine -> go (OVar $ toIndex ctx lvl) spine
-  ONFlex lvl spine -> go (OMeta $ toIndex lvl lvl) spine
+  ONFlex m spine -> go (OMeta m) spine
   where
     go :: ObjTerm -> Seq ObjValue -> ObjEvalResult ObjTerm
     go = seqFoldlM (\h vArg -> OApp h <$> readback ctx vArg)
@@ -34,6 +34,6 @@ readback lvl = \case
 
 normalize :: LevelId -> ObjTerm -> ObjEvalResult ObjTerm
 normalize lvl tm = do
-  let env = normalizeEnv lvl
+  let env = pushFreshVarN' (unLevel lvl) eempty
   val <- evaluateObj tm env
   readback lvl val

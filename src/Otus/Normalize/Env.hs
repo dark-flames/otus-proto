@@ -1,15 +1,6 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Otus.Normalize.Env (
   Value (..),
   Environment (..),
-  envLevel,
-  pushFreshVar,
-  pushFreshVarN,
-  pushFreshVar',
-  pushFreshVarN',
-  find,
-  normalizeEnv,
 ) where
 
 import Otus.Ast
@@ -18,48 +9,38 @@ import Otus.Common
 class Value val where
   type Neutral val
   vVar :: LevelId -> val
-  vVars :: (Item l ~ LevelId, Item r ~ val, Sequence l, Sequence r) => l -> r
+  vVars :: (Item l ~ LevelId, Sequence l) => l -> Seq val
   vVars = seqMap vVar
   fromNeutral :: Neutral val -> val
 
-newtype Environment val = Env (Seq val)
-  deriving (Eq, Show)
+class (SeqSize env, Value (Element env)) => Environment env where
+  type Element env
+  eempty :: env
 
-instance SeqSize (Environment val) where
-  size (Env s) = size s
+  find :: (SeqIndex id) => id -> env -> Maybe (Element env)
 
-instance Sequence (Environment val) where
-  type Item (Environment val) = val
+  envLevel :: env -> LevelId
 
-  fromList :: [Item (Environment val)] -> Environment val
-  fromList = Env . fromList
-  toSeq (Env s) = s
-  fromSeq = Env
+  push :: Element env -> env -> env
+  push e = pushN (asSeq [e])
 
-find :: (SeqIndex id) => id -> Environment val -> Maybe val
-find idx (Env e) = e @? idx
+  pushN :: (Item l ~ Element env, Sequence l) => l -> env -> env
 
-envLevel :: Environment val -> LevelId
-envLevel = LevelId . size
+  pushFreshVar :: env -> (Element env, env)
+  pushFreshVar env =
+    let (s, env') = pushFreshVarN 1 env
+    in (index s 0, env')
 
-pushFreshVar :: (Value val) => Environment val -> Environment val
-pushFreshVar = snd . pushFreshVar'
+  pushFreshVarN :: Int -> env -> (Seq (Element env), env)
+  pushFreshVarN n env =
+    let
+      base = LevelId (size env)
+      vals = vVars $ levelRng base n
+    in
+      (vals, pushN vals env)
 
-pushFreshVarN :: (Value val) => Int -> Environment val -> Environment val
-pushFreshVarN n env = snd (pushFreshVarN' n env)
+  pushFreshVar' :: env -> env
+  pushFreshVar' = snd . pushFreshVar
 
-pushFreshVar' :: (Value val) => Environment val -> (val, Environment val)
-pushFreshVar' env =
-  let val = (vVar $ LevelId (size env))
-  in (val, env |> val)
-
-pushFreshVarN' :: (Value val) => Int -> Environment val -> (Seq val, Environment val)
-pushFreshVarN' n env =
-  let
-    base = LevelId (size env)
-    vals = vVars $ levelRng base n
-  in
-    (vals, env >< vals)
-
-normalizeEnv :: (SeqSize l, Value val) => l -> Environment val
-normalizeEnv l = pushFreshVarN (size l) empty
+  pushFreshVarN' :: Int -> env -> env
+  pushFreshVarN' n = snd . pushFreshVarN n

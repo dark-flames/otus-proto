@@ -12,6 +12,7 @@ import Control.Monad.State.Lazy (evalStateT)
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
+import Otus.Normalize.Env
 import Otus.Normalize.Meta.Value
 import Otus.Normalize.Object.Error
 
@@ -35,4 +36,4 @@ fromObjResult = \case
   Failure err -> Failure $ MetaObjError err
 
 evalObjEvalMonad :: ObjEvalMonad a -> MetaEvalResult a
-evalObjEvalMonad m = fromObjResult $ evalStateT m empty
+evalObjEvalMonad m = fromObjResult $ evalStateT m eempty

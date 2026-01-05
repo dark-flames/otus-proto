@@ -41,7 +41,7 @@ library
       Otus.Normalize.Object.Error
       Otus.Normalize.Object.Eval
       Otus.Normalize.Object.Quote
-      Otus.Normalize.Object.Solve
+      Otus.Normalize.Object.Unify
       Otus.Normalize.Object.Value
   other-modules:
       Paths_otus_proto
