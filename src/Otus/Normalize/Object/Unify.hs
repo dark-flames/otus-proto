@@ -39,7 +39,9 @@ isSolved m =
       _ -> return False
 
 doSolveMeta :: MetaId -> ObjValue -> SolveMonad ()
-doSolveMeta m val = modify $ solveMeta m val
+doSolveMeta m val = do
+  modify $ solveMeta m val
+  lift $ ResultT $ Consistant True (Success ())
 
 metaSize :: SolveMonad Int
 metaSize = gets size
