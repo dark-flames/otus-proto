@@ -8,13 +8,9 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
-import Otus.Normalize.Env (Environment (eempty, pushFreshVarN'))
 import Otus.Normalize.Meta.Error
 import Otus.Normalize.Meta.Value
 import Otus.Normalize.Object
-
-buildObjEnv :: Int -> ObjEnv
-buildObjEnv s = pushFreshVarN' s eempty
 
 evaluateMeta :: MetaTerm -> MetaEnv -> MetaEvalResult MetaValue
 evaluateMeta tm env = case tm of
@@ -26,11 +22,23 @@ evaluateMeta tm env = case tm of
     vFn <- go fn
     vArg <- go arg
     evalMetaApp vFn vArg
-  MGuarded domainSize problem subst -> do
-    let objEnv = buildObjEnv domainSize
-    vProblem <- fromObjResult $ evalProblem problem objEnv
-    return $ MVConsistent domainSize vProblem subst
+  MGuarded domainSize problem record -> do
+    let mctx = buildMetaCtx domainSize
+    let objEnv = ObjEnv mctx empty
+    res <- fromObjResult $ evalProblem problem objEnv >>= solveProblem mctx
+    case res of
+      Just (vProb, mctx') -> do
+        vRecord <- fromObjResult $ evalSubstitution record (ObjEnv mctx' empty)
+        return $ MVConsistent mctx' vProb vRecord undefined
+      Nothing -> return MVErr
   MErr -> return MVErr
+  MProduct lhs rhs -> do
+    vLhs <- go lhs
+    vRhs <- go rhs
+    evalMetaProduct vLhs vRhs
+  MCSubst _prev _problem _record _tm -> do
+    _ <- evalMetaCSubst undefined undefined undefined
+    undefined
   where
     go tm' = evaluateMeta tm' env
 
@@ -50,3 +58,19 @@ evalMetaApp vFn vArg = case vFn of
   MVLam cls -> evalMetaClosure cls vArg
   MVNeutral neu -> returnNeutral $ metaNeutralApp neu vArg
   _ -> throwError MetaAppOnNonFn
+
+evalMetaProduct :: MetaValue -> MetaValue -> MetaEvalResult MetaValue
+evalMetaProduct lhs rhs = case (lhs, rhs) of
+  (MVErr, _) | isInner rhs -> return MVErr
+  (_, MVErr) | isInner lhs -> return MVErr
+  (MVConsistent _lCtx _lProb _lRecord _, MVConsistent _rCtx _rProb _rRecord _) -> undefined -- todo: renaming
+  (MVNeutral neu, _) -> returnNeutral $ MNProductL neu rhs
+  (_, MVNeutral neu) -> returnNeutral $ MNProductR lhs neu
+  _ -> throwError MetaCombainOnNonInner
+
+evalMetaCSubst :: MetaValue -> Problem -> Record -> MetaEvalResult MetaValue
+evalMetaCSubst prev problem record = case prev of
+  MVErr -> return MVErr
+  (MVConsistent _mctx _prevProblem _prevVRecord _) -> undefined
+  MVNeutral neu -> returnNeutral $ MNSubst neu problem record
+  _ -> throwError MetaCSubstOnNonInner

@@ -18,18 +18,26 @@ import Otus.Normalize.Object.Eval
 import Otus.Normalize.Object.Value
 
 -- Constraint Solve
-
-data WFProblem = WFProblem
-  { pCtx :: Int,
-    wfProblem :: VProblem
+data SolveState = SolveState
+  { metaCtx :: MetaContext,
+    modified :: Bool
   }
   deriving (Eq, Show)
 
+getMetaCtx :: SolveMonad MetaContext
+getMetaCtx = gets metaCtx
+
+modifyMetaCtx :: (MetaContext -> MetaContext) -> SolveMonad ()
+modifyMetaCtx f = modify (\(SolveState ctx m) -> SolveState (f ctx) m)
+
 doFindMeta :: MetaId -> SolveMonad MetaEntry
 doFindMeta m =
-  gets (@? unMeta m) >>= \case
-    Just res -> return res
-    Nothing -> throwError $ ObjUnknownMeta m
+  getMetaCtx
+    >>= ( \case
+            Just res -> return res
+            Nothing -> throwError $ ObjUnknownMeta m
+        )
+      . (@? unMeta m)
 
 isSolved :: MetaId -> SolveMonad Bool
 isSolved m =
@@ -40,46 +48,56 @@ isSolved m =
 
 doSolveMeta :: MetaId -> ObjValue -> SolveMonad ()
 doSolveMeta m val = do
-  modify $ solveMeta m val
-  lift $ ResultT $ Consistant True (Success ())
+  modifyMetaCtx $ solveMeta m val
+  setModified
+  lift $ ResultT $ Consistant (Success ())
 
 metaSize :: SolveMonad Int
-metaSize = gets size
+metaSize = size <$> getMetaCtx
+
+isModified :: SolveMonad Bool
+isModified = gets modified
+
+resetModified :: SolveMonad ()
+resetModified = modify (\(SolveState ctx _) -> SolveState ctx False)
+
+setModified :: SolveMonad ()
+setModified = modify (\(SolveState ctx _) -> SolveState ctx True)
 
 newtype MetaSubst = MSubst (Seq (Maybe ObjValue))
   deriving (Eq, Show)
 
 -- Control
 data SolveResult res
-  = Consistant Bool res
+  = Consistant res
   | Conflict
   deriving (Eq, Show)
 
 instance Functor SolveResult where
   fmap f = \case
     Conflict -> Conflict
-    Consistant m r -> Consistant m $ f r
+    Consistant r -> Consistant $ f r
 
 instance Applicative SolveResult where
-  pure = Consistant False
+  pure = Consistant
 
   Conflict <*> _ = Conflict
   _ <*> Conflict = Conflict
-  (Consistant mf f) <*> (Consistant ma a) = Consistant (mf || ma) $ f a
+  (Consistant f) <*> (Consistant a) = Consistant $ f a
 
 instance Monad SolveResult where
   Conflict >>= _ = Conflict
-  Consistant ma r >>= f = case f r of
+  Consistant r >>= f = case f r of
     Conflict -> Conflict
-    Consistant mb r' -> Consistant (ma || mb) r'
+    Consistant r' -> Consistant r'
 
-type SolveMonad = StateT MetaContext (ObjEvalResultT SolveResult)
+type SolveMonad = StateT SolveState (ObjEvalResultT SolveResult)
 
-runSolveMonad :: SolveMonad a -> MetaContext -> ObjEvalResult (SolveResult (a, MetaContext))
-runSolveMonad m env = case runResultT (runStateT m env) of
+runSolveMonad :: SolveMonad a -> MetaContext -> ObjEvalResult (SolveResult (a, SolveState))
+runSolveMonad m env = case runResultT (runStateT m (SolveState env False)) of
   Conflict -> return Conflict
-  Consistant modified (Success r) -> return $ Consistant modified r
-  Consistant _ (Failure e) -> throwError e
+  Consistant (Success r) -> return $ Consistant r
+  Consistant (Failure e) -> throwError e
 
 liftEvalResult :: ObjEvalResult a -> SolveMonad a
 liftEvalResult eval = lift $ ResultT (pure eval)
@@ -95,15 +113,22 @@ conflict = lift $ ResultT Conflict
 
 type ConstraintSeq = Seq VConstraint
 
-solveProblem :: WFProblem -> ObjEvalResult (Maybe (WFProblem, VRecord))
-solveProblem (WFProblem domainSize (VProb constrSet)) = do
-  res <- runSolveMonad (solveConstraintSet constrSet) (buildMetaCtx domainSize)
+solveProblem :: MetaContext -> VProblem -> ObjEvalResult (Maybe (VProblem, MetaContext))
+solveProblem mctx (VProb s) = do
+  res <- runSolveMonad (solveConstraintSet s) mctx
   case res of
     Conflict -> return Nothing
-    Consistant _ _constrSet' -> undefined
+    Consistant (s', SolveState mctx' _) -> return $ Just (VProb s', mctx')
 
 solveConstraintSet :: ConstraintSeq -> SolveMonad ConstraintSeq
-solveConstraintSet = seqMAppendM solveConstraint
+solveConstraintSet s = do
+  res <- seqMAppendM solveConstraint s
+  isModified
+    >>= \case
+      True -> do
+        resetModified
+        solveConstraintSet res
+      False -> return res
 
 solveConstraint :: VConstraint -> SolveMonad ConstraintSeq
 solveConstraint (VTmEq ctxSize lhs rhs) = unifyTm ctxSize lhs rhs

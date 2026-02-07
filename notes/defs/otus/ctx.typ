@@ -1,6 +1,4 @@
-#import "../../libs/lib.typ": *;
-#import "../../symbol/ctx.typ": *;
-#import "../../symbol/judgment.typ": *;
+#import "../../symbol": *;
 
 #let empty = Def(
   "Empty", 

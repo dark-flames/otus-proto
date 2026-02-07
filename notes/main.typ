@@ -10,7 +10,7 @@
   show-title: true,
   authors: (
     (
-      name: "Zhan Shi",
+      name: "darkflames",
       email: "darkf1ames@pm.me",
     ),
   ),
@@ -25,11 +25,16 @@
     .map(str)
     .join("."))
 
+#show math.equation: set text(size: 12pt)
 
+= Overview
+#include "content/overview.typ"
 
-= Syntax
+= Design
+#include "content/design.typ"
 
-#include "content/syntax.typ"
+/*
+
 
 == Judgments
 
@@ -49,6 +54,7 @@
 #let ctx-figure = def-formatter(mltt.ctx.group, "ctx");
 
 #ctx-figure.content
+*/
 
 
 

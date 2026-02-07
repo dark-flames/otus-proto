@@ -20,7 +20,8 @@ data MetaEvalError
   = MetaAnyhow String
   | MetaUnboundIndex IndexId
   | MetaAppOnNonFn
-  | MetaBindOnNonDyn
+  | MetaCombainOnNonInner
+  | MetaCSubstOnNonInner
   | MetaObjError ObjEvalError
   deriving (Eq, Show)
 

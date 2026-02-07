@@ -77,5 +77,7 @@ data MetaTerm
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
   | MGuarded Int Problem Record
+  | MProduct MetaTerm MetaTerm
+  | MCSubst MetaTerm Problem Record ObjTerm
   | MErr
   deriving (Eq, Show)

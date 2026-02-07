@@ -10,6 +10,7 @@ module Otus.Normalize.Object.Value (
   VRecord (..),
   VConstraint (..),
   VProblem (..),
+  ConstraintSubstitution (CSubst),
   ObjValue (.., OVVar, OVMeta),
   ObjValueSeq,
   ObjNeutral (..),
@@ -97,7 +98,7 @@ data VConstraint
   = VTmEq Int ObjValue ObjValue
   deriving (Eq, Show)
 
--- signature
+-- problem
 newtype VProblem = VProb (Seq VConstraint)
   deriving (Eq, Show)
 
@@ -108,6 +109,14 @@ instance Sequence VProblem where
   type Item VProblem = VConstraint
   fromSeq = VProb
   toSeq (VProb s) = s
+
+data ConstraintSubstitution
+  = CSubst
+  { dom :: Int,
+    problem :: VProblem,
+    subst :: Record
+  }
+  deriving (Eq, Show)
 
 -- neutral
 data ObjNeutral

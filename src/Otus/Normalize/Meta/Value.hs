@@ -6,6 +6,7 @@ module Otus.Normalize.Meta.Value (
   MetaNeutral (..),
   MetaValue (..),
   metaNeutralApp,
+  isInner,
 ) where
 
 import Otus.Ast
@@ -37,20 +38,22 @@ data MetaClosure = MetaClosure MetaEnv MetaTerm
 data MetaNeutral
   = MNVar LevelId
   | MNApp MetaNeutral MetaValueSeq
+  | MNProductL MetaNeutral MetaValue
+  | MNProductR MetaValue MetaNeutral
+  | MNSubst MetaNeutral Problem Record
   deriving (Eq, Show)
 
 type MetaValueSeq = Seq MetaValue
 
 data MetaVType
   = MVFn MetaVType MetaVType
-  | MVDyn MetaVType
   | MVInner VTelescope
   deriving (Eq, Show)
 
 data MetaValue
   = MVNeutral MetaNeutral
   | MVLam MetaClosure
-  | MVConsistent Int VProblem Record
+  | MVConsistent MetaContext VProblem VRecord ObjTerm
   | MVErr
   deriving (Eq, Show)
 
@@ -63,3 +66,10 @@ metaNeutralApp :: MetaNeutral -> MetaValue -> MetaNeutral
 metaNeutralApp n arg = case n of
   MNApp h args -> MNApp h (arg <| args)
   _ -> MNApp n $ singleton arg
+
+isInner :: MetaValue -> Bool
+isInner = \case
+  MVConsistent {} -> True
+  MVErr -> True
+  MVNeutral _ -> True
+  _ -> False
