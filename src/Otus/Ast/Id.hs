@@ -1,10 +1,8 @@
 module Otus.Ast.Id (
   IndexId (..),
   LevelId (..),
-  MetaId (..),
   SeqIndex (..),
   incrLvl,
-  levelRng,
   toLevel,
   toIndex,
 ) where
@@ -20,8 +18,8 @@ instance SeqIndex IndexId where
   intoLeftIndex l (IndexId i) = size l - i - 1
   intoRightIndex _ (IndexId i) = i
 
-toLevel :: (SeqSize l) => l -> IndexId -> LevelId
-toLevel s idx = LevelId $ intoLeftIndex (size s) idx
+toLevel :: (Sized l) => l -> IndexId -> LevelId
+toLevel l idx = LevelId $ intoLeftIndex l idx
 
 newtype LevelId = LevelId {unLevel :: Int}
   deriving (Eq, Num, Ord, Show) via Int
@@ -32,16 +30,11 @@ instance SeqIndex LevelId where
   intoLeftIndex _ (LevelId i) = i
   intoRightIndex l (LevelId i) = size l - i - 1
 
-instance SeqSize LevelId where
+instance Sized LevelId where
   size (LevelId lvl) = lvl
 
 incrLvl :: LevelId -> LevelId
 incrLvl = shift 1
 
-levelRng :: LevelId -> Int -> Seq LevelId
-levelRng base rng = seqMap (`shift` base) $ asSeq [0 .. rng]
-
-toIndex :: (SeqSize l) => l -> LevelId -> IndexId
+toIndex :: (Sized l) => l -> LevelId -> IndexId
 toIndex l lvl = IndexId $ intoRightIndex l lvl
-
-newtype MetaId = MetaId {unMeta :: Int} deriving (Eq, Num, Ord, Show) via Int

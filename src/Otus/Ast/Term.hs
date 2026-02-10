@@ -1,83 +1,74 @@
 module Otus.Ast.Term (
-  Telescope (..),
-  Record (..),
+  Telescope,
+  Record,
+  Sequence,
   Constraint (..),
-  Problem (..),
-  ObjTerm (..),
-  ObjTermSeq,
+  Problem,
+  Term (..),
+  Effect (..),
+  EffectSet,
   MetaType (..),
   MetaTerm (..),
 ) where
 
+import Data.Set (Set)
+
 import Otus.Ast.Id
 import Otus.Common
 
--- Telescope
-newtype Telescope = Tele ObjTermSeq
-  deriving (Eq, Show)
+type Telescope = Seq Term
 
-instance SeqSize Telescope where
-  size (Tele s) = size s
+type Record = Seq Term
 
-instance Sequence Telescope where
-  type Item Telescope = ObjTerm
-  fromSeq = Tele
-  toSeq (Tele s) = s
+type Sequence = Seq Term
 
--- Substitution
-newtype Record = Record ObjTermSeq
-  deriving (Eq, Show)
+type Problem = Seq Constraint
 
-instance SeqSize Record where
-  size (Record s) = size s
-
-instance Sequence Record where
-  type Item Record = ObjTerm
-  fromSeq = Record
-  toSeq (Record s) = s
-
--- Signature
 data Constraint
-  = TmEq Int ObjTerm ObjTerm
+  = TmEq Int Term Term
   deriving (Eq, Show)
 
-newtype Problem = Sig (Seq Constraint)
-  deriving (Eq, Show)
-
-instance SeqSize Problem where
-  size (Sig s) = size s
-
-instance Sequence Problem where
-  type Item Problem = Constraint
-  fromSeq = Sig
-  toSeq (Sig s) = s
-
--- Obj
-type ObjTermSeq = Seq ObjTerm
-
-data ObjTerm
-  = OVar IndexId
-  | OMeta MetaId
+data Term
+  = Var IndexId
   | -- Pi type
-    OPi ObjTerm ObjTerm
-  | OLam ObjTerm
-  | OApp ObjTerm ObjTerm
+    Pi Term Term
+  | Lam Term
+  | App Term Term
+  | -- Record
+    Record Telescope
+  | List Record
+  | First Term
+  | Rest Term
+  | -- Embedding
+    Splicing MetaTerm
   | -- Universe
-    OType
+    Type Int
   deriving (Eq, Show)
 
--- Meta
+data Effect
+  = Unification
+  | NonTermination
+  deriving (Eq, Show)
+
+type EffectSet = Set Effect
+
 data MetaType
-  = MFn MetaType MetaType
-  | MInner Telescope
+  = MTyVar IndexId
+  | MAbs MetaTerm
+  | MTApp MetaTerm MetaTerm
+  | MFn MetaTerm MetaTerm
+  | MDyn Telescope Telescope
+  | MStatic Telescope
+  | MType
+  | MKind
   deriving (Eq, Show)
 
 data MetaTerm
   = MVar IndexId
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
-  | MGuarded Int Problem Record
-  | MProduct MetaTerm MetaTerm
-  | MCSubst MetaTerm Problem Record ObjTerm
-  | MErr
+  | MGuarded Problem Sequence
+  | MQuote Record
+  | MForce Term
+  | MSeqApp Term Term
   deriving (Eq, Show)

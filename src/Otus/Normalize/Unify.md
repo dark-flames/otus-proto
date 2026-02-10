@@ -1,3 +1,4 @@
+```haskell
 module Otus.Normalize.Object.Unify (
   solveProblem,
   isSolved,
@@ -46,7 +47,7 @@ isSolved m =
       Solved _ -> return True
       _ -> return False
 
-doSolveMeta :: MetaId -> ObjValue -> SolveMonad ()
+doSolveMeta :: MetaId -> Value -> SolveMonad ()
 doSolveMeta m val = do
   modifyMetaCtx $ solveMeta m val
   setModified
@@ -64,7 +65,7 @@ resetModified = modify (\(SolveState ctx _) -> SolveState ctx False)
 setModified :: SolveMonad ()
 setModified = modify (\(SolveState ctx _) -> SolveState ctx True)
 
-newtype MetaSubst = MSubst (Seq (Maybe ObjValue))
+newtype MetaSubst = MSubst (Seq (Maybe Value))
   deriving (Eq, Show)
 
 -- Control
@@ -102,10 +103,10 @@ runSolveMonad m env = case runResultT (runStateT m (SolveState env False)) of
 liftEvalResult :: ObjEvalResult a -> SolveMonad a
 liftEvalResult eval = lift $ ResultT (pure eval)
 
-doEvalApp :: ObjValue -> ObjValue -> SolveMonad ObjValue
+doEvalApp :: Value -> Value -> SolveMonad Value
 doEvalApp fn arg = liftEvalResult $ evalApp fn arg
 
-doEvalClosure :: ObjValue -> ObjClosure -> SolveMonad ObjValue
+doEvalClosure :: Value -> ObjClosure -> SolveMonad Value
 doEvalClosure arg cls = liftEvalResult $ evalClosure arg cls
 
 conflict :: SolveMonad a
@@ -133,7 +134,7 @@ solveConstraintSet s = do
 solveConstraint :: VConstraint -> SolveMonad ConstraintSeq
 solveConstraint (VTmEq ctxSize lhs rhs) = unifyTm ctxSize lhs rhs
 
-unifyTm :: Int -> ObjValue -> ObjValue -> SolveMonad ConstraintSeq
+unifyTm :: Int -> Value -> Value -> SolveMonad ConstraintSeq
 unifyTm ctxSize lhs rhs = do
   lhs' <- force lhs
   rhs' <- force rhs
@@ -166,13 +167,13 @@ unifyTm ctxSize lhs rhs = do
     (_, OVNeutral (ONFlex rh rs)) -> solve ctxSize rh rs lhs'
     _ -> throwError $ UnsolvableTmEq ctxSize lhs rhs
   where
-    freshBind :: SolveMonad ObjValue
+    freshBind :: SolveMonad Value
     freshBind = (vVar . LevelId) . shift ctxSize <$> metaSize
 
     keepConstraint :: SolveMonad ConstraintSeq
     keepConstraint = return $ singleton $ VTmEq ctxSize lhs rhs
 
-force :: ObjValue -> SolveMonad ObjValue
+force :: Value -> SolveMonad Value
 force = \case
   OVNeutral neu -> case neu of
     ONFlex lvl spine ->
@@ -182,7 +183,7 @@ force = \case
     _ -> returnNeutral neu
   val -> return val
 
-unifySpine :: Int -> ObjValueSeq -> ObjValueSeq -> SolveMonad ConstraintSeq
+unifySpine :: Int -> ValueSeq -> ValueSeq -> SolveMonad ConstraintSeq
 unifySpine ctxSize ls rs = case (ls, rs) of
   (Empty, Empty) -> return empty
   (lhs :<| ls', rhs :<| rs') -> do
@@ -202,13 +203,13 @@ liftPRenaming :: PartialRenaming -> PartialRenaming
 liftPRenaming (PRen dom cod ren) =
   PRen (dom + 1) (cod + 1) (IM.insert cod (LevelId dom) ren)
 
-invert :: Int -> ObjValueSeq -> SolveMonad (Maybe PartialRenaming)
+invert :: Int -> ValueSeq -> SolveMonad (Maybe PartialRenaming)
 invert cod sp =
   go sp >>= \case
     Just (dom, ren) -> return $ Just $ PRen dom cod ren
     _ -> return Nothing
   where
-    go :: ObjValueSeq -> SolveMonad (Maybe (Int, IM.IntMap LevelId))
+    go :: ValueSeq -> SolveMonad (Maybe (Int, IM.IntMap LevelId))
     go Empty = return $ Just (0, mempty)
     go (sp' :|> param) =
       go sp' >>= \case
@@ -223,16 +224,16 @@ invert cod sp =
             _ -> return Nothing
         _ -> return Nothing
 
-rename :: Int -> MetaId -> PartialRenaming -> ObjValue -> SolveMonad ObjTerm
+rename :: Int -> MetaId -> PartialRenaming -> Value -> SolveMonad Term
 rename ctxSize m = go
   where
-    goSpine :: PartialRenaming -> ObjTerm -> ObjValueSeq -> SolveMonad ObjTerm
+    goSpine :: PartialRenaming -> Term -> ValueSeq -> SolveMonad Term
     goSpine pren h = \case
       Empty -> return h
       a :<| sp -> do
         a' <- go pren a
-        goSpine pren (OApp h a') sp
-    go :: PartialRenaming -> ObjValue -> SolveMonad ObjTerm
+        goSpine pren (App h a') sp
+    go :: PartialRenaming -> Value -> SolveMonad Term
     go pren t =
       force t
         >>= \case
@@ -244,24 +245,24 @@ rename ctxSize m = go
                 goSpine pren (OMeta m) sp
             ONRigid (LevelId x) sp -> case IM.lookup x (prRen pren) of
               Nothing -> conflict -- todo: keep?
-              Just lvl -> goSpine pren (OVar $ toIndex ctxSize lvl) sp
+              Just lvl -> goSpine pren (Var $ toIndex ctxSize lvl) sp
           OVLam cls -> do
             body <- doEvalClosure (vVar $ LevelId $ prCod pren) cls
             bodyTm <- go (liftPRenaming pren) body
-            return $ OLam bodyTm
+            return $ Lam bodyTm
           OVPi a cls -> do
             aTm <- go pren a
             b <- doEvalClosure (vVar $ LevelId $ prCod pren) cls
             bTm <- go (liftPRenaming pren) b
-            return $ OPi aTm bTm
+            return $ Pi aTm bTm
           OVType -> return OType
 
-lams :: Int -> ObjTerm -> ObjTerm
+lams :: Int -> Term -> Term
 lams = \case
-  x | x > 0 -> OLam . lams (x - 1)
+  x | x > 0 -> Lam . lams (x - 1)
   _ -> id
 
-solve :: Int -> MetaId -> ObjValueSeq -> ObjValue -> SolveMonad ConstraintSeq
+solve :: Int -> MetaId -> ValueSeq -> Value -> SolveMonad ConstraintSeq
 solve ctxSize m sp rhs =
   invert ctxSize sp
     >>= \case

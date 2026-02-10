@@ -23,26 +23,12 @@ library
       Otus.Common
       Otus.Common.Result
       Otus.Common.Seq
-      Otus.Common.Univ
       Otus.Common.Utils
-      Otus.Elaboration
-      Otus.Elaboration.Context
-      Otus.Elaboration.Control
-      Otus.Elaboration.Elab
-      Otus.Elaboration.Expr
       Otus.Normalize
       Otus.Normalize.Control
-      Otus.Normalize.Env
-      Otus.Normalize.Meta
-      Otus.Normalize.Meta.Error
-      Otus.Normalize.Meta.Eval
-      Otus.Normalize.Meta.Value
-      Otus.Normalize.Object
-      Otus.Normalize.Object.Error
-      Otus.Normalize.Object.Eval
-      Otus.Normalize.Object.Quote
-      Otus.Normalize.Object.Unify
-      Otus.Normalize.Object.Value
+      Otus.Normalize.Error
+      Otus.Normalize.Eval
+      Otus.Normalize.Value
   other-modules:
       Paths_otus_proto
   hs-source-dirs:
