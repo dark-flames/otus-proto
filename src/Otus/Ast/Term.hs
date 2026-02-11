@@ -7,7 +7,6 @@ module Otus.Ast.Term (
   Term (..),
   Effect (..),
   EffectSet,
-  MetaType (..),
   MetaTerm (..),
 ) where
 
@@ -52,23 +51,26 @@ data Effect
 
 type EffectSet = Set Effect
 
-data MetaType
-  = MTyVar IndexId
-  | MAbs MetaTerm
-  | MTApp MetaTerm MetaTerm
-  | MFn MetaTerm MetaTerm
-  | MDyn Telescope Telescope
-  | MStatic Telescope
-  | MType
-  | MKind
-  deriving (Eq, Show)
-
 data MetaTerm
   = MVar IndexId
+  | MPi MetaTerm EffectSet MetaTerm
   | MLam MetaTerm
   | MApp MetaTerm MetaTerm
-  | MGuarded Problem Sequence
+  | -- CBPV
+    MF MetaTerm
+  | MReturn MetaTerm
+  | MTrigger Effect
+  | MLetIn MetaTerm MetaTerm
+  | MU EffectSet MetaTerm
+  | MThunk MetaTerm
+  | MForce MetaTerm
+  | MCType Int
+  | MVType Int
+  | -- Embedding
+    MLift Telescope
   | MQuote Record
-  | MForce Term
-  | MSeqApp Term Term
+  | MDyn Telescope Telescope
+  | MNil Int
+  | MExt MetaTerm Int Problem Sequence
+  | MSolve MetaTerm
   deriving (Eq, Show)

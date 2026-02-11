@@ -1,6 +1,7 @@
 module Otus.Normalize.Value (
   EnvItem (..),
   Environment (..),
+  objLiftEnv,
   freshVar,
   freshVar',
   freshMetaVar,
@@ -9,7 +10,6 @@ module Otus.Normalize.Value (
   Closure (..),
   ObjClosure,
   MetaClosure,
-  MetaTyClosure,
   VTelescope,
   VRecord,
   VSequence,
@@ -19,7 +19,6 @@ module Otus.Normalize.Value (
   Stuck (..),
   Value (..),
   MetaSpine (..),
-  MetaVType (..),
   MetaValue (..),
 ) where
 
@@ -39,6 +38,12 @@ newtype Environment = Env
 
 envLevel :: Environment -> LevelId
 envLevel = LevelId . size
+
+objLiftEnv :: Int -> Environment -> Environment
+objLiftEnv n env = env ||><| fmap f (fromList [s .. s + n])
+  where
+    s = size env
+    f i = Neutral (NVar $ LevelId i) SNil
 
 freshVar :: Environment -> (Value, Environment)
 freshVar env = (val, env ||> val)
@@ -62,21 +67,19 @@ class EnvValue v where
   (||>) :: Environment -> v -> Environment
   e ||> val = Env (unEnv e |> intoItem val)
 
-  (<||>) :: Environment -> Seq v -> Environment
-  e <||> s = Env (unEnv e >< fmap intoItem s)
+  (||><|) :: Environment -> Seq v -> Environment
+  e ||><| s = Env (unEnv e >< fmap intoItem s)
 
 -- Closure
 data Closure tm = Closure
   { clsEnv :: Environment,
-    clsTm :: Term
+    clsTm :: tm
   }
   deriving (Eq, Show)
 
 type ObjClosure = Closure Term
 
 type MetaClosure = Closure MetaTerm
-
-type MetaTyClosure = Closure MetaType
 
 -- Object
 type VTelescope = Seq Value
@@ -117,25 +120,29 @@ data MetaSpine
   = MSNil
   | MSApp MetaSpine MetaValue
   | MSForce MetaSpine
-  | MSSeqAppL MetaSpine MetaValue
-  | MSSeqAppR MetaValue MetaSpine
-  deriving (Eq, Show)
-
-data MetaVType
-  = MVTNeutral LevelId (Seq MetaVType)
-  | MVAbs MetaClosure
-  | MVFn MetaValue MetaValue
-  | MVDyn VTelescope VTelescope
-  | MVStatic VTelescope
-  | MVType
-  | MVKind
+  | MSBind MetaSpine MetaClosure
+  | MSExt MetaSpine VProblem Environment Sequence
+  | MSSolveWith MetaSpine VProblem (Seq (Environment, Sequence))
   deriving (Eq, Show)
 
 data MetaValue
   = MNeutral LevelId MetaSpine
+  | MVPi MetaValue EffectSet MetaClosure
   | MVLam MetaClosure
-  | MVGuarded VProblem VSequence
-  | MVQuote Record -- problem: term or value?
+  | -- CBPV
+    MVF MetaValue -- Value -> Computation
+  | MVReturn MetaValue
+  | MVTrigger Effect
+  | MVU EffectSet MetaValue -- Computation -> Value
+  | MVThunk Environment MetaTerm
+  | MVCType Int
+  | MVVType Int
+  | -- Embedding
+    MVLift VTelescope
+  | MVQuote VRecord
+  | MVDyn VTelescope VTelescope
+  | MVNil Int
+  | MVExt MetaValue Int VProblem Environment Sequence
   deriving (Eq, Show)
 
 instance Sized Environment where

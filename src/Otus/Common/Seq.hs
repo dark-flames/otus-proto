@@ -6,10 +6,12 @@ module Otus.Common.Seq (
   (|>),
   (<|),
   (><),
+  fromList,
+  singleton,
   foldlM,
 ) where
 
-import Data.Sequence (Seq (..), (<|), (><), (|>))
+import Data.Sequence (Seq (..), fromList, singleton, (<|), (><), (|>))
 
 import qualified Data.Sequence as Seq
 
