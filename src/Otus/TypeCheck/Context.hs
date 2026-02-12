@@ -1,0 +1,45 @@
+module Otus.TypeCheck.Context (
+  ContextSeg (..),
+  Context (..),
+  ContextTy (..),
+  ctxLvl,
+) where
+
+import Otus (LevelId)
+import Otus.Common
+import Otus.Normalize
+
+data ContextSeg
+  = MetaTy MetaValue
+  | ObjTy Value
+  deriving (Eq, Show)
+
+data Context = Context
+  { tys :: Seq ContextSeg,
+    ctxEnv :: Environment
+  }
+  deriving (Eq, Show)
+
+class ContextTy t where
+  intoSeg :: t -> (ContextSeg, Environment -> Environment)
+
+  (|:>) :: Context -> t -> Context
+  ctx |:> t = Context (tys ctx |> seg) (f $ ctxEnv ctx)
+    where
+      (seg, f) = intoSeg t
+
+instance Sized Context where
+  size = size . tys
+
+instance Indexable Context where
+  type Item Context = ContextSeg
+  (@?) ctx i = tys ctx @? i
+
+instance ContextTy MetaValue where
+  intoSeg t = (MetaTy t, freshMetaVar')
+
+instance ContextTy Value where
+  intoSeg t = (ObjTy t, freshVar')
+
+ctxLvl :: Context -> LevelId
+ctxLvl = envLevel . ctxEnv

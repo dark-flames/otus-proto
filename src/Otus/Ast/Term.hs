@@ -5,13 +5,11 @@ module Otus.Ast.Term (
   Constraint (..),
   Problem,
   Term (..),
-  Effect (..),
   EffectSet,
   MetaTerm (..),
 ) where
 
-import Data.Set (Set)
-
+import Otus.Ast.Effect
 import Otus.Ast.Id
 import Otus.Common
 
@@ -44,13 +42,6 @@ data Term
     Type Int
   deriving (Eq, Show)
 
-data Effect
-  = Unification
-  | NonTermination
-  deriving (Eq, Show)
-
-type EffectSet = Set Effect
-
 data MetaTerm
   = MVar IndexId
   | MPi MetaTerm EffectSet MetaTerm
@@ -59,8 +50,8 @@ data MetaTerm
   | -- CBPV
     MF MetaTerm
   | MReturn MetaTerm
-  | MTrigger Effect
-  | MLetIn MetaTerm MetaTerm
+  | MTrigger Effect MetaTerm
+  | MLetIn MetaTerm MetaTerm MetaTerm
   | MU EffectSet MetaTerm
   | MThunk MetaTerm
   | MForce MetaTerm

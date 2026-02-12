@@ -2,6 +2,7 @@ module Otus.Normalize.Value (
   EnvItem (..),
   Environment (..),
   objLiftEnv,
+  envLevel,
   freshVar,
   freshVar',
   freshMetaVar,
@@ -20,6 +21,8 @@ module Otus.Normalize.Value (
   Value (..),
   MetaSpine (..),
   MetaValue (..),
+  vvar,
+  mvvar,
 ) where
 
 import Otus.Ast
@@ -43,12 +46,12 @@ objLiftEnv :: Int -> Environment -> Environment
 objLiftEnv n env = env ||><| fmap f (fromList [s .. s + n])
   where
     s = size env
-    f i = Neutral (NVar $ LevelId i) SNil
+    f = vvar . LevelId
 
 freshVar :: Environment -> (Value, Environment)
 freshVar env = (val, env ||> val)
   where
-    val = Neutral (NVar $ envLevel env) SNil
+    val = vvar $ envLevel env
 
 freshVar' :: Environment -> Environment
 freshVar' = snd . freshVar
@@ -56,7 +59,7 @@ freshVar' = snd . freshVar
 freshMetaVar :: Environment -> (MetaValue, Environment)
 freshMetaVar env = (val, env ||> val)
   where
-    val = MNeutral (envLevel env) MSNil
+    val = mvvar $ envLevel env
 
 freshMetaVar' :: Environment -> Environment
 freshMetaVar' = snd . freshMetaVar
@@ -120,7 +123,7 @@ data MetaSpine
   = MSNil
   | MSApp MetaSpine MetaValue
   | MSForce MetaSpine
-  | MSBind MetaSpine MetaClosure
+  | MSBind MetaSpine MetaClosure MetaClosure
   | MSExt MetaSpine VProblem Environment Sequence
   | MSSolveWith MetaSpine VProblem (Seq (Environment, Sequence))
   deriving (Eq, Show)
@@ -132,9 +135,9 @@ data MetaValue
   | -- CBPV
     MVF MetaValue -- Value -> Computation
   | MVReturn MetaValue
-  | MVTrigger Effect
+  | MVTrigger Effect MetaValue
   | MVU EffectSet MetaValue -- Computation -> Value
-  | MVThunk Environment MetaTerm
+  | MVThunk MetaValue
   | MVCType Int
   | MVVType Int
   | -- Embedding
@@ -157,3 +160,12 @@ instance EnvValue Value where
 
 instance EnvValue MetaValue where
   intoItem = MetaVal
+
+instance EnvValue EnvItem where
+  intoItem = id
+
+vvar :: LevelId -> Value
+vvar lvl = Neutral (NVar lvl) SNil
+
+mvvar :: LevelId -> MetaValue
+mvvar lvl = MNeutral lvl MSNil

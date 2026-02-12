@@ -1,4 +1,6 @@
 module Otus.Normalize.Eval (
+  evaluateMetaClosure,
+  evaluateMetaClosureFresh,
   evaluateMetaValue,
   evaluateMetaComputation,
   evaluate,
@@ -16,9 +18,12 @@ import Otus.Normalize.Value
 evaluateMetaClosure :: MetaValue -> MetaClosure -> EvalResult MetaValue
 evaluateMetaClosure p cls = evaluateMetaComputation (clsTm cls) (clsEnv cls ||> p)
 
+evaluateMetaClosureFresh :: MetaClosure -> EvalResult MetaValue
+evaluateMetaClosureFresh cls = evaluateMetaComputation (clsTm cls) (freshVar' $ clsEnv cls)
+
 evaluateMForce :: MetaValue -> EvalResult MetaValue
 evaluateMForce = \case
-  MVThunk env c -> evaluateMetaComputation c env
+  MVThunk c -> return c
   MNeutral h spine -> return $ MNeutral h (MSForce spine)
   _ -> throwError ForceOnNonValue
 
@@ -28,12 +33,14 @@ evaluateMApp vFn vParam = case vFn of
   MNeutral h spine -> return $ MNeutral h (MSApp spine vParam)
   _ -> throwError AppOnNonLambda
 
-evaluateMBind :: MetaValue -> MetaClosure -> EvalResult MetaValue
-evaluateMBind = \case
-  MVTrigger eff -> const $ return $ MVTrigger eff
-  MVReturn val -> evaluateMetaClosure val
-  MNeutral h spine -> return . MNeutral h . MSBind spine
-  _ -> const $ throwError BindOnNonComputation
+evaluateMBind :: MetaValue -> MetaClosure -> MetaClosure -> EvalResult MetaValue
+evaluateMBind prev curCls tyCls = case prev of
+  MVTrigger eff _ -> do
+    cty <- evaluateMetaClosure (MVThunk prev) tyCls
+    return $ MVTrigger eff cty
+  MVReturn val -> evaluateMetaClosure val curCls
+  MNeutral h spine -> return $ MNeutral h (MSBind spine curCls tyCls)
+  _ -> throwError BindOnNonComputation
 
 evaluateSolve :: MetaValue -> EvalResult MetaValue
 evaluateSolve d = go d mempty mempty
@@ -50,18 +57,10 @@ evaluateMetaValue tm env = case tm of
     Nothing -> throwError $ UnboundIndex idx
     Just (ObjVal _) -> throwError $ InvalidObjVar idx
     Just (MetaVal val) -> return val
-  MPi dom eff cod -> do
-    vDom <- evaluateMetaValue dom env
-    let cls = Closure env cod
-    return $ MVPi vDom eff cls
-  MF ty -> do
-    vTy <- evaluateMetaValue ty env
-    return $ MVF vTy
   MU effs ty -> do
     vTy <- evaluateMetaValue ty env
     return $ MVU effs vTy
-  MThunk ctm -> return $ MVThunk env ctm
-  MCType lvl -> return $ MVCType lvl
+  MThunk ctm -> MVThunk <$> evaluateMetaComputation ctm env
   MVType lvl -> return $ MVVType lvl
   MLift oty -> MVLift . fst <$> evaluateTelescope oty env
   MQuote otm -> MVQuote <$> evaluateRecord otm env
@@ -78,20 +77,24 @@ evaluateMetaValue tm env = case tm of
 
 evaluateMetaComputation :: MetaTerm -> Environment -> EvalResult MetaValue
 evaluateMetaComputation ctm env = case ctm of
-  MVar idx -> case env @? idx of
-    Nothing -> throwError $ UnboundIndex idx
-    Just (ObjVal _) -> throwError $ InvalidObjVar idx
-    Just (MetaVal val) -> return val
+  MPi dom eff cod -> do
+    vDom <- evaluateMetaValue dom env
+    let cls = Closure env cod
+    return $ MVPi vDom eff cls
   MLam body -> return $ MVLam (Closure env body)
   MApp f p -> do
     vP <- evaluateMetaValue p env
     cF <- evaluateMetaComputation f env
     evaluateMApp cF vP
+  MF ty -> do
+    vTy <- evaluateMetaValue ty env
+    return $ MVF vTy
   MReturn tm -> MVReturn <$> evaluateMetaValue tm env
-  MTrigger eff -> return $ MVTrigger eff
-  MLetIn prev cur -> do
+  MTrigger eff ty -> MVTrigger eff <$> evaluateMetaComputation ty env
+  MCType lvl -> return $ MVCType lvl
+  MLetIn prev cur ty -> do
     cPrev <- evaluateMetaComputation prev env
-    evaluateMBind cPrev (Closure env cur)
+    evaluateMBind cPrev (Closure env cur) (Closure env ty)
   MForce tm -> do
     val <- evaluateMetaValue tm env
     evaluateMForce val

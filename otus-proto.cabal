@@ -18,9 +18,11 @@ library
   exposed-modules:
       Otus
       Otus.Ast
+      Otus.Ast.Effect
       Otus.Ast.Id
       Otus.Ast.Term
       Otus.Common
+      Otus.Common.Algebra
       Otus.Common.Result
       Otus.Common.Seq
       Otus.Common.Utils
@@ -29,6 +31,12 @@ library
       Otus.Normalize.Error
       Otus.Normalize.Eval
       Otus.Normalize.Value
+      Otus.TypeCheck
+      Otus.TypeCheck.Context
+      Otus.TypeCheck.Conv
+      Otus.TypeCheck.Error
+      Otus.TypeCheck.Judgement
+      Otus.TypeCheck.Tyck
   other-modules:
       Paths_otus_proto
   hs-source-dirs:
@@ -46,9 +54,11 @@ library
       TypeFamilies
       TypeOperators
       DerivingVia
+      DuplicateRecordFields
+      DisambiguateRecordFields
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
-      base >=4.20.1.0 && <4.20.2.0
+      base >=4.20.2.0 && <4.21.0.0
     , containers >=0.8 && <1
-    , mtl >=2.3.1 && <3
+    , mtl >=2.3.2 && <3
   default-language: Haskell2010
