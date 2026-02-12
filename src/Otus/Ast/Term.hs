@@ -43,25 +43,26 @@ data Term
   deriving (Eq, Show)
 
 data MetaTerm
-  = MVar IndexId
-  | MPi MetaTerm EffectSet MetaTerm
-  | MLam MetaTerm
-  | MApp MetaTerm MetaTerm
-  | -- CBPV
-    MF MetaTerm
-  | MReturn MetaTerm
-  | MTrigger Effect MetaTerm
-  | MLetIn MetaTerm MetaTerm MetaTerm
+  = -- Value
+    MVar IndexId
   | MU EffectSet MetaTerm
   | MThunk MetaTerm
-  | MForce MetaTerm
-  | MCType Int
   | MVType Int
-  | -- Embedding
+  | ---- Embedding
     MLift Telescope
   | MQuote Record
   | MDyn Telescope Telescope
   | MNil Int
   | MExt MetaTerm Int Problem Sequence
+  | -- Computation
+    MPi MetaTerm EffectSet MetaTerm
+  | MLam MetaTerm
+  | MApp MetaTerm MetaTerm
+  | MF MetaTerm
+  | MReturn MetaTerm
+  | MTrigger Effect MetaTerm
+  | MLetIn MetaTerm MetaTerm MetaTerm
+  | MForce MetaTerm
+  | MCType Int
   | MSolve MetaTerm
   deriving (Eq, Show)

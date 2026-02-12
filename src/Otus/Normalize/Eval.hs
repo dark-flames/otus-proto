@@ -1,4 +1,5 @@
 module Otus.Normalize.Eval (
+  evaluateMApp,
   evaluateMetaClosure,
   evaluateMetaClosureFresh,
   evaluateMetaValue,
@@ -30,6 +31,9 @@ evaluateMForce = \case
 evaluateMApp :: MetaValue -> MetaValue -> EvalResult MetaValue
 evaluateMApp vFn vParam = case vFn of
   MVLam cls -> evaluateMetaClosure vParam cls
+  MVTrigger e (MVPi dom _ cls) -> do
+    res <- evaluateMetaClosure (MVTrigger e dom) cls
+    return $ MVTrigger e res
   MNeutral h spine -> return $ MNeutral h (MSApp spine vParam)
   _ -> throwError AppOnNonLambda
 

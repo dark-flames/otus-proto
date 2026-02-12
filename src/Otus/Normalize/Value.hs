@@ -130,18 +130,18 @@ data MetaSpine
 
 data MetaValue
   = MNeutral LevelId MetaSpine
-  | MVPi MetaValue EffectSet MetaClosure
+  | -- Comptation
+    MVPi MetaValue EffectSet MetaClosure
   | MVLam MetaClosure
-  | -- CBPV
-    MVF MetaValue -- Value -> Computation
+  | MVF MetaValue
   | MVReturn MetaValue
   | MVTrigger Effect MetaValue
-  | MVU EffectSet MetaValue -- Computation -> Value
-  | MVThunk MetaValue
   | MVCType Int
+  | -- Value
+    MVU EffectSet MetaValue
+  | MVThunk MetaValue
   | MVVType Int
-  | -- Embedding
-    MVLift VTelescope
+  | MVLift VTelescope
   | MVQuote VRecord
   | MVDyn VTelescope VTelescope
   | MVNil Int

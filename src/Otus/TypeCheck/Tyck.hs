@@ -188,7 +188,7 @@ checkValue ctx preTm vTy = case (preTm, vTy) of
       throwError $ ComputationEffErr c (effOf cTm) e
   _ -> do
     vTm <- inferValue ctx preTm
-    conv <- valueConversionCheck (ctxLvl ctx) (vtyOf vTm) vTy
+    conv <- valueConv (ctxLvl ctx) (vtyOf vTm) vTy
     if conv then
       return $
         WfValue
@@ -219,7 +219,7 @@ checkComputation ctx preTm cTy = case (preTm, cTy) of
         }
   _ -> do
     cTm <- inferComputation ctx preTm
-    conv <- computationConversionCheck (ctxLvl ctx) (ctyOf cTm) cTy
+    conv <- computationConv (ctxLvl ctx) (ctyOf cTm) cTy
     if conv then
       return $
         WfComputation
