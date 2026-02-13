@@ -23,6 +23,7 @@ library
       Otus.Ast.Term
       Otus.Common
       Otus.Common.Algebra
+      Otus.Common.Pretty
       Otus.Common.Result
       Otus.Common.Seq
       Otus.Common.Utils
@@ -30,6 +31,7 @@ library
       Otus.Normalize.Control
       Otus.Normalize.Error
       Otus.Normalize.Eval
+      Otus.Normalize.Readback
       Otus.Normalize.Value
       Otus.TypeCheck
       Otus.TypeCheck.Context
@@ -61,4 +63,37 @@ library
       base >=4.20.2.0 && <4.21.0.0
     , containers >=0.8 && <1
     , mtl >=2.3.2 && <3
+  default-language: Haskell2010
+
+test-suite tests
+  type: exitcode-stdio-1.0
+  main-is: TestMain.hs
+  other-modules:
+      CBPV.Basic
+      CBPV.Helper
+      Paths_otus_proto
+  hs-source-dirs:
+      tests
+  default-extensions:
+      MultiParamTypeClasses
+      StandaloneDeriving
+      FlexibleInstances
+      ScopedTypeVariables
+      TupleSections
+      FlexibleContexts
+      LambdaCase
+      PatternSynonyms
+      ViewPatterns
+      TypeFamilies
+      TypeOperators
+      DerivingVia
+      DuplicateRecordFields
+      DisambiguateRecordFields
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
+  build-depends:
+      HUnit
+    , base >=4.20.2.0 && <4.21.0.0
+    , containers >=0.8 && <1
+    , mtl >=2.3.2 && <3
+    , otus-proto
   default-language: Haskell2010

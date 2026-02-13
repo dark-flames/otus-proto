@@ -23,6 +23,7 @@ module Otus.Normalize.Value (
   MetaValue (..),
   vvar,
   mvvar,
+  emptyEnv,
 ) where
 
 import Otus.Ast
@@ -169,3 +170,6 @@ vvar lvl = Neutral (NVar lvl) SNil
 
 mvvar :: LevelId -> MetaValue
 mvvar lvl = MNeutral lvl MSNil
+
+emptyEnv :: Environment
+emptyEnv = Env mempty

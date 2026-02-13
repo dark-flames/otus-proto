@@ -3,9 +3,10 @@ module Otus.TypeCheck.Context (
   Context (..),
   ContextTy (..),
   ctxLvl,
+  emptyCtx,
 ) where
 
-import Otus (LevelId)
+import Otus.Ast
 import Otus.Common
 import Otus.Normalize
 
@@ -43,3 +44,6 @@ instance ContextTy Value where
 
 ctxLvl :: Context -> LevelId
 ctxLvl = envLevel . ctxEnv
+
+emptyCtx :: Context
+emptyCtx = Context mempty emptyEnv

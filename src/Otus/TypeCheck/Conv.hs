@@ -19,8 +19,8 @@ metaSpineConv lvl lhs rhs = case (lhs, rhs) of
   (MSForce lh, MSForce rh) -> metaSpineConv lvl lh rh
   (MSBind lh lCls _, MSBind rh rCls _) -> do
     let p = mvvar lvl
-    lbind <- mapEvalResult $ evaluateMetaClosure p lCls
-    rbind <- mapEvalResult $ evaluateMetaClosure p rCls
+    lbind <- doEvalClosure p lCls
+    rbind <- doEvalClosure p rCls
     bindConv <- valueConv (incrLvl lvl) lbind rbind
     if bindConv then
       metaSpineConv lvl lh rh
@@ -46,20 +46,20 @@ computationConv lvl lhs rhs = case (lhs, rhs) of
     domConv <- valueConv lvl lDom rDom
     let eConv = le `lte` re == Just True
     if domConv && eConv then do
-      lCod <- mapEvalResult $ evaluateMetaClosure (mvvar lvl) lCls
-      rCod <- mapEvalResult $ evaluateMetaClosure (mvvar lvl) rCls
+      lCod <- doEvalClosure (mvvar lvl) lCls
+      rCod <- doEvalClosure (mvvar lvl) rCls
       computationConv (incrLvl lvl) lCod rCod
     else
       return False
   (MVLam _, _) -> do
     let p = mvvar lvl
-    lRes <- mapEvalResult $ evaluateMApp lhs p
-    rRes <- mapEvalResult $ evaluateMApp rhs p
+    lRes <- doEvalMApp lvl lhs p
+    rRes <- doEvalMApp lvl rhs p
     computationConv (incrLvl lvl) lRes rRes
   (_, MVLam _) -> do
     let p = mvvar lvl
-    lRes <- mapEvalResult $ evaluateMApp lhs p
-    rRes <- mapEvalResult $ evaluateMApp rhs p
+    lRes <- doEvalMApp lvl lhs p
+    rRes <- doEvalMApp lvl rhs p
     computationConv (incrLvl lvl) lRes rRes
   (MVF lv, MVF rv) -> valueConv lvl lv rv
   (MVReturn lv, MVReturn rv) -> valueConv lvl lv rv

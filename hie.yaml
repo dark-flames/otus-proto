@@ -1,3 +1,8 @@
 cradle:
   stack:
     stackYaml: "./stack.yaml"
+    components:
+      - path: "./src"
+        component: "otus-proto:lib"
+      - path: "./tests/TestMain.hs"
+        component: "otus-proto:test:tests"

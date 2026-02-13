@@ -20,7 +20,7 @@ evaluateMetaClosure :: MetaValue -> MetaClosure -> EvalResult MetaValue
 evaluateMetaClosure p cls = evaluateMetaComputation (clsTm cls) (clsEnv cls ||> p)
 
 evaluateMetaClosureFresh :: MetaClosure -> EvalResult MetaValue
-evaluateMetaClosureFresh cls = evaluateMetaComputation (clsTm cls) (freshVar' $ clsEnv cls)
+evaluateMetaClosureFresh cls = evaluateMetaComputation (clsTm cls) (freshMetaVar' $ clsEnv cls)
 
 evaluateMForce :: MetaValue -> EvalResult MetaValue
 evaluateMForce = \case
@@ -62,7 +62,7 @@ evaluateMetaValue tm env = case tm of
     Just (ObjVal _) -> throwError $ InvalidObjVar idx
     Just (MetaVal val) -> return val
   MU effs ty -> do
-    vTy <- evaluateMetaValue ty env
+    vTy <- evaluateMetaComputation ty env
     return $ MVU effs vTy
   MThunk ctm -> MVThunk <$> evaluateMetaComputation ctm env
   MVType lvl -> return $ MVVType lvl
@@ -77,7 +77,7 @@ evaluateMetaValue tm env = case tm of
     vPrev <- evaluateMetaValue prev env
     vProb <- evaluateProblem lift prob env
     return $ MVExt vPrev lift vProb env s
-  _ -> throwError $ Anyhow "unimplement"
+  _ -> throwError $ Anyhow $ "not value: " ++ show tm
 
 evaluateMetaComputation :: MetaTerm -> Environment -> EvalResult MetaValue
 evaluateMetaComputation ctm env = case ctm of
@@ -105,7 +105,7 @@ evaluateMetaComputation ctm env = case ctm of
   MSolve tm -> do
     val <- evaluateMetaValue tm env
     evaluateSolve val
-  _ -> throwError $ Anyhow "unimplement"
+  _ -> throwError $ Anyhow $ "not computation:" ++ show ctm
 
 -- object
 

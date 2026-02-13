@@ -65,4 +65,24 @@ data MetaTerm
   | MForce MetaTerm
   | MCType Int
   | MSolve MetaTerm
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Pretty MetaTerm where
+  pretty = \case
+    MVar i -> "%" ++ show (unIndex i)
+    MU eff t -> "U(" ++ pretty eff ++ " ! " ++ pretty t ++ ")"
+    MThunk t -> "[" ++ pretty t ++ "]"
+    MVType i -> "VTy(" ++ show i ++ ")"
+    MPi dom eff cod -> "Π(" ++ pretty dom ++ ")." ++ pretty eff ++ "!" ++ pretty cod ++ ")"
+    MLam body -> "λ. (" ++ pretty body ++ ")"
+    MApp f p -> pretty f ++ " ∘ " ++ pretty p
+    MF t -> "F(" ++ pretty t ++ ")"
+    MReturn t -> "return(" ++ pretty t ++ ")"
+    MTrigger eff t -> "trigger(" ++ pretty eff ++ " ! " ++ pretty t ++ ")"
+    MLetIn p b t -> "let (" ++ pretty p ++ ") in " ++ pretty b ++ " :: " ++ pretty t
+    MForce t -> "force(" ++ pretty t ++ ")"
+    MCType i -> "CTy(" ++ show i ++ ")"
+    _ -> "undefinded"
+
+instance Show MetaTerm where
+  show = pretty

@@ -38,5 +38,17 @@ instance PartialOrder EffectSet where
 instance JoinSemilattice EffectSet where
   (EffectSet l) \/ (EffectSet r) = EffectSet $ union l r
 
+instance Pretty Effect where
+  pretty = \case
+    Unification -> "u"
+    NonTermination -> "t"
+
+instance Pretty EffectSet where
+  pretty s =
+    if S.null $ rawSet s then
+      "∅"
+    else
+      foldl (\l r -> l ++ "\\/" ++ r) "" $ map pretty (S.toList $ rawSet s)
+
 singletonEff :: Effect -> EffectSet
 singletonEff = EffectSet . S.singleton

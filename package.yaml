@@ -42,3 +42,12 @@ default-extensions:
 
 library:
   source-dirs: src
+
+tests:
+  tests:
+    main:                TestMain.hs
+    source-dirs:         
+    - tests
+    dependencies:
+    - otus-proto
+    - HUnit
