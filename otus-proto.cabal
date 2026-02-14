@@ -58,6 +58,7 @@ library
       DerivingVia
       DuplicateRecordFields
       DisambiguateRecordFields
+      TypeApplications
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       base >=4.20.2.0 && <4.21.0.0
@@ -89,6 +90,7 @@ test-suite tests
       DerivingVia
       DuplicateRecordFields
       DisambiguateRecordFields
+      TypeApplications
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       HUnit

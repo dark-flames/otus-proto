@@ -33,29 +33,33 @@ inferTy' ctx preTy = do
   tyTm <- infer ctx preTy
   case tyOf tyTm of
     VType l -> do
-      ty <- doEval (tm tyTm) (ctxEnv ctx)
+      ty <- doEval ctx (tm tyTm)
       return (tyTm, ty, l)
     _ -> throwError $ CannotCheckAsType preTy
 
 inferTelescope :: Context -> Telescope -> TypeCheckResult (Telescope, Int)
-inferTelescope _ Empty = return (Empty, 0)
-inferTelescope ctx (preTy :<| rest) = do
-  (tyTm, ty, l) <- inferTy' ctx preTy
-  (restTm, restL) <- inferTelescope (ctx |:> ty) rest
-  return (tm tyTm :<| restTm, max l restL)
+inferTelescope c t = mapFst TeleSeq <$> go c (unTele t)
+  where
+    go _ Empty = return (Empty, 0)
+    go ctx (preTy :<| rest) = do
+      (tyTm, ty, l) <- inferTy' ctx preTy
+      (restTm, restL) <- go (ctx |:> ty) rest
+      return (tm tyTm :<| restTm, max l restL)
 
 checkRecord :: Context -> Record -> VTelescope -> TypeCheckResult Record
-checkRecord ctx preRecord tele = case (preRecord, tele) of
-  (Empty, VTNil) -> return Empty
-  (preTm :<| restPR, VTCons ty cls) -> do
-    t <- check ctx preTm ty
-    v <- doEval (tm t) (ctxEnv ctx)
-    restTele <- doEvalTeleClosure v cls
-    restR <- checkRecord (ctx |:> ty) restPR restTele
-    return $ tm t :<| restR
-  _ -> do
-    teleTm <- doReadbackTele (ctxLvl ctx) tele
-    throwError $ CannotCheckRecord preRecord teleTm
+checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
+  where
+    go ctx preRecord tele = case (preRecord, tele) of
+      (Empty, VTNil) -> return Empty
+      (preTm :<| restPR, VTCons ty cls) -> do
+        t <- check ctx preTm ty
+        v <- doEval ctx (tm t)
+        restTele <- doEvalClosure v cls
+        restR <- go (ctx |:> ty) restPR restTele
+        return $ tm t :<| restR
+      _ -> do
+        teleTm <- doQuote ctx tele
+        throwError $ CannotCheckRecord (RecordSeq preRecord) teleTm
 
 infer :: Context -> Term -> TypeCheckResult WfTerm
 infer ctx = \case
@@ -82,7 +86,7 @@ infer ctx = \case
   Lam (Just preTy) body -> do
     (tyTm, ty, _) <- inferTy' ctx preTy
     bodyTm <- infer (ctx |:> ty) body
-    codTyTm <- doReadback (incrLvl $ ctxLvl ctx) (tyOf bodyTm)
+    codTyTm <- doQuote (ctx |:> ty) (tyOf bodyTm)
     return $
       WfTerm
         { tm = Lam (Just $ tm tyTm) (tm bodyTm),
@@ -94,7 +98,7 @@ infer ctx = \case
       VPi dom cls -> do
         -- Γ |- p : A
         pTm <- check ctx p dom
-        vP <- doEval (tm pTm) (ctxEnv ctx)
+        vP <- doEval ctx (tm pTm)
         -- Γ |- B[id, p] type
         res <- doEvalClosure vP cls
         -- Γ |- f p : B[id, p]
@@ -104,7 +108,7 @@ infer ctx = \case
               tyOf = res
             }
       fTy -> do
-        fTyTm <- doReadback (ctxLvl ctx) fTy
+        fTyTm <- doQuote ctx fTy
         throwError $ ExpectedToBeFn (tm fTm) fTyTm
   Record preTele -> do
     (teleTm, l) <- inferTelescope ctx preTele
@@ -123,21 +127,21 @@ infer ctx = \case
               tyOf = headTy
             }
       ty -> do
-        tyTm <- doReadback (ctxLvl ctx) ty
+        tyTm <- doQuote ctx ty
         throwError $ ExpectedToBeNonEmptyRecord preTm tyTm
   Rest preTm -> do
     t <- infer ctx preTm
     case tyOf t of
       VRecord (VTCons _ cls) -> do
-        val <- doEval (First preTm) (ctxEnv ctx)
-        restTele <- doEvalTeleClosure val cls
+        val <- doEval ctx (First preTm)
+        restTele <- doEvalClosure val cls
         return $
           WfTerm
             { tm = Rest (tm t),
               tyOf = VRecord restTele
             }
       ty -> do
-        tyTm <- doReadback (ctxLvl ctx) ty
+        tyTm <- doQuote ctx ty
         throwError $ ExpectedToBeNonEmptyRecord preTm tyTm
   Splicing preMeta -> do
     meta <- inferValue ctx preMeta
@@ -149,7 +153,7 @@ infer ctx = \case
               tyOf = VRecord ty
             }
       metaTy -> do
-        metaTyTm <- doReadbackMeta (ctxLvl ctx) metaTy
+        metaTyTm <- doQuote ctx metaTy
         throwError $ CannotSplicing preMeta metaTyTm
   preTm -> throwError $ CannotInferTerm preTm
 
@@ -164,8 +168,7 @@ check ctx preTm ty = case (preTm, ty) of
         if c then
           return pTy
         else do
-          let lvl = ctxLvl ctx
-          domTm <- doReadback lvl dom
+          domTm <- doQuote ctx dom
           throwError $ Unify preTm prePTy domTm
 
     cod <- doEvalClosureFresh cls
@@ -199,20 +202,19 @@ check ctx preTm ty = case (preTm, ty) of
             tyOf = ty
           }
     else do
-      let lvl = ctxLvl ctx
-      lTy <- doReadback lvl (tyOf t)
-      rTy <- doReadback lvl ty
+      lTy <- doQuote ctx (tyOf t)
+      rTy <- doQuote ctx ty
       throwError $ Unify preTm lTy rTy
 
 -- Meta Language Type Checking
 inferValue :: Context -> MetaTerm -> TypeCheckResult WfValue
-inferValue ctx preTm = case preTm of
+inferValue ctx = \case
   MVar idx -> case ctx @? idx of
-    Just (MetaTy mty) ->
+    Just (MetaTy ty) ->
       return $
         WfValue
-          { vtm = preTm,
-            vtyOf = mty
+          { vtm = MVar idx,
+            vtyOf = ty
           }
     Just (ObjTy _) -> throwError CannotInferObjAsMeta
     _ -> throwError CannotInferIndex
@@ -229,7 +231,6 @@ inferValue ctx preTm = case preTm of
   MThunk c -> do
     -- Γ |- c <: e' ! C
     cTm <- inferComputation ctx c
-
     return $
       WfValue
         { vtm = MThunk (ctm cTm),
@@ -238,33 +239,33 @@ inferValue ctx preTm = case preTm of
   MVType l ->
     return $
       WfValue
-        { vtm = preTm,
+        { vtm = MVType l,
           vtyOf = MVVType (l + 1)
         }
-  _ -> throwError $ CannotInferValue preTm
+  preTm -> throwError $ CannotInferValue preTm
 
 inferComputation :: Context -> MetaTerm -> TypeCheckResult WfComputation
-inferComputation ctx preTm = case preTm of
+inferComputation ctx = \case
   MTyAnnotation preCTm preCTy -> do
     cTy <- inferComputationTy ctx preCTy
     checkComputation ctx preCTm cTy
   MPi dom eff cod -> do
     -- Γ |- Dom vtype @ domL
-    (domVTyTm, domVTy, domL) <- inferValueTy' ctx dom
+    (domTm, domTy, domL) <- inferValueTy' ctx dom
     -- Γ, Dom |- Cod ctype @ codL ! e
-    (codCTyTm, _, codL) <- inferComputationTy' (ctx |:> domVTy) cod
+    (codTm, _, codL) <- inferComputationTy' (ctx |:> domTy) cod
 
     -- Γ |- Pi(Dom, eff, Cod) ctype @ domL /\ codL ! e
     return $
       WfComputation
-        { ctm = MPi (vtm domVTyTm) eff (ctm codCTyTm),
-          effOf = effOf codCTyTm,
+        { ctm = MPi (vtm domTm) eff (ctm codTm),
+          effOf = effOf codTm,
           ctyOf = MVCType (max domL codL)
         }
   MLam (Just preTy) body -> do
     (tyTm, ty, _) <- inferValueTy' ctx preTy
     bodyTm <- inferComputation (ctx |:> ty) body
-    codTyTm <- doReadbackMeta (incrLvl $ ctxLvl ctx) (ctyOf bodyTm)
+    codTyTm <- doQuote (ctx |:> ty) (ctyOf bodyTm)
     return $
       WfComputation
         { ctm = MLam (Just $ vtm tyTm) (ctm bodyTm),
@@ -279,9 +280,9 @@ inferComputation ctx preTm = case preTm of
       MVPi dom e' cls -> do
         -- Γ |- p<: A
         pTm <- checkValue ctx p dom
-        vP <- doEvalValue (vtm pTm) (ctxEnv ctx)
+        vP <- doEval ctx (vtm pTm)
         -- Γ |- B[id, p] ctype
-        res <- doEvalMetaClosure vP cls
+        res <- doEvalClosure vP cls
         -- Γ |- f p :> e \/ e' ! B[id, p]
         return $
           WfComputation
@@ -290,15 +291,15 @@ inferComputation ctx preTm = case preTm of
               ctyOf = res
             }
       fTy -> do
-        fTyTm <- doReadbackMeta (ctxLvl ctx) fTy
-        throwError $ ExpectedToBeMetaFn preTm fTyTm
-  MF a -> do
+        fTyTm <- doQuote ctx fTy
+        throwError $ ExpectedToBeMetaFn (MApp f p) fTyTm
+  MF preTy -> do
     -- Γ |- A vtype @ l
-    (aTm, _, l) <- inferValueTy' ctx a
+    (tyTm, _, l) <- inferValueTy' ctx preTy
     -- Γ |- F(A): empty ! CTy l
     return $
       WfComputation
-        { ctm = MF (vtm aTm),
+        { ctm = MF (vtm tyTm),
           effOf = mempty,
           ctyOf = MVCType l
         }
@@ -310,7 +311,7 @@ inferComputation ctx preTm = case preTm of
           effOf = mempty,
           ctyOf = MVF (vtyOf vTm)
         }
-  MLetIn prev bind bindTy -> do
+  MLetIn prev bind preBindTy -> do
     -- Γ |- prev :> e ! F(A)
     prevTm <- inferComputation ctx prev
     let e = effOf prevTm
@@ -318,31 +319,29 @@ inferComputation ctx preTm = case preTm of
       MVF vTy -> do
         let env = ctxEnv ctx
         -- Γ, U(e, F(A)) |- B ctype
-        (kleisliExt, _, _) <- inferComputationTy' (ctx |:> MVU e (MVF vTy)) bindTy
+        (bindTyTm, _, _) <- inferComputationTy' (ctx |:> MVU e (MVF vTy)) preBindTy
         -- Γ, A |- drop(1), thunk(return v0) => Γ, U(e, F(A))
         let thunked = MVThunk (MVReturn $ mvvar $ envLevel env)
         -- Γ, A |- B[drop(1), thunk(return v0)] ctype
         bindCTy <-
-          doEvalComputation (ctm kleisliExt) (env ||> thunked)
+          doEval' ctx [thunked] (ctm bindTyTm)
         -- Γ, A |- bind <: e' ! B[drop(1), thunk(return v0)]
         bindTm <- checkComputation (ctx |:> vTy) bind bindCTy
         let e' = effOf bindTm
         -- Γ |- id, thunk prev => Γ, U(e, F(A))
-        vPrevTm <- doEvalComputation (ctm prevTm) env
+        vPrevTm <- doEval ctx (ctm prevTm)
         -- Γ |- B[id, thunk prev] ctype
         resultCTy <-
-          doEvalComputation
-            (ctm kleisliExt)
-            (env ||> MVThunk vPrevTm)
+          doEval' ctx [MVThunk vPrevTm] (ctm bindTyTm)
         -- Γ |- let prev in bind :> e \/ e' ! B[thunk prev]
         return $
           WfComputation
-            { ctm = MLetIn (ctm prevTm) (ctm bindTm) (ctm kleisliExt),
+            { ctm = MLetIn (ctm prevTm) (ctm bindTm) (ctm bindTyTm),
               effOf = e \/ e',
               ctyOf = resultCTy
             }
       cTy -> do
-        t <- doReadbackMeta (ctxLvl ctx) cTy
+        t <- doQuote ctx cTy
         throwError $ CannotBindOn prev t
   MForce v -> do
     -- Γ |- v :> U e C
@@ -357,17 +356,17 @@ inferComputation ctx preTm = case preTm of
               ctyOf = cTy
             }
       t -> do
-        ty <- doReadbackMeta (ctxLvl ctx) t
+        ty <- doQuote ctx t
         throwError $ CannotForce v ty
   -- Γ |- CTy(l) :> CTy(suc l)
   MCType l ->
     return $
       WfComputation
-        { ctm = preTm,
+        { ctm = MCType l,
           effOf = mempty,
           ctyOf = MVCType (l + 1)
         }
-  _ -> throwError $ CannotInferComputation preTm
+  preTm -> throwError $ CannotInferComputation preTm
 
 inferValueTy :: Context -> MetaTerm -> TypeCheckResult MetaType
 inferValueTy ctx preVTy = do
@@ -379,7 +378,7 @@ inferValueTy' ctx preVTy = do
   vTyTm <- inferValue ctx preVTy
   case vtyOf vTyTm of
     MVVType l -> do
-      vTy <- doEvalValue (vtm vTyTm) (ctxEnv ctx)
+      vTy <- doEval ctx (vtm vTyTm)
       return (vTyTm, vTy, l)
     _ -> throwError $ ExpectedToBeValueTy preVTy
 
@@ -393,7 +392,7 @@ inferComputationTy' ctx preCTy = do
   cTyTm <- inferComputation ctx preCTy
   case ctyOf cTyTm of
     MVCType l -> do
-      cTy <- doEvalComputation (ctm cTyTm) (ctxEnv ctx)
+      cTy <- doEval ctx (ctm cTyTm)
       return (cTyTm, cTy, l)
     _ -> throwError $ ExpectedToBeComputationTy preCTy
 
@@ -414,7 +413,7 @@ checkValue ctx preTm vTy = case (preTm, vTy) of
       throwError $ ComputationEffErr c (effOf cTm) e
   _ -> do
     vTm <- inferValue ctx preTm
-    c <- valueConv (ctxLvl ctx) (vtyOf vTm) vTy
+    c <- conv (ctxLvl ctx) (vtyOf vTm) vTy
     if c then
       return $
         WfValue
@@ -422,9 +421,8 @@ checkValue ctx preTm vTy = case (preTm, vTy) of
             vtyOf = vTy
           }
     else do
-      let lvl = ctxLvl ctx
-      lTy <- doReadbackMeta lvl (vtyOf vTm)
-      rTy <- doReadbackMeta lvl vTy
+      lTy <- doQuote ctx (vtyOf vTm)
+      rTy <- doQuote ctx vTy
       throwError $ ValueUnify preTm lTy rTy
 
 checkComputation :: Context -> MetaTerm -> MetaType -> TypeCheckResult WfComputation
@@ -434,15 +432,14 @@ checkComputation ctx preTm cTy = case (preTm, cTy) of
       Nothing -> return dom
       Just prePTy -> do
         pTy <- inferValueTy ctx prePTy
-        c <- computationConv (ctxLvl ctx) pTy dom
+        c <- conv (ctxLvl ctx) pTy dom
         if c then
           return pTy
         else do
-          let lvl = ctxLvl ctx
-          domTm <- doReadbackMeta lvl dom
+          domTm <- doQuote ctx dom
           throwError $ ComputationUnify preTm prePTy domTm
 
-    cod <- doEvalMetaClosureFresh cls
+    cod <- doEvalClosureFresh cls
     bodyTm <- checkComputation (ctx |:> domTy) body cod
     return $
       WfComputation
@@ -468,7 +465,7 @@ checkComputation ctx preTm cTy = case (preTm, cTy) of
         }
   _ -> do
     cTm <- inferComputation ctx preTm
-    c <- computationConv (ctxLvl ctx) (ctyOf cTm) cTy
+    c <- conv (ctxLvl ctx) (ctyOf cTm) cTy
     if c then
       return $
         WfComputation
@@ -477,7 +474,6 @@ checkComputation ctx preTm cTy = case (preTm, cTy) of
             ctyOf = cTy
           }
     else do
-      let lvl = ctxLvl ctx
-      lTy <- doReadbackMeta lvl (ctyOf cTm)
-      rTy <- doReadbackMeta lvl cTy
+      lTy <- doQuote ctx (ctyOf cTm)
+      rTy <- doQuote ctx cTy
       throwError $ ComputationUnify preTm lTy rTy

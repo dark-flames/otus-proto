@@ -1,7 +1,7 @@
 module Otus.Ast.Term (
-  Telescope,
-  Record,
-  Sequence,
+  Telescope (..),
+  Record (..),
+  Sequence (..),
   Constraint (..),
   Problem,
   Term (..),
@@ -13,11 +13,20 @@ import Otus.Ast.Effect
 import Otus.Ast.Id
 import Otus.Common
 
-type Telescope = Seq Term
+newtype Telescope = TeleSeq
+  { unTele :: Seq Term
+  }
+  deriving (Eq, Show)
 
-type Record = Seq Term
+newtype Record = RecordSeq
+  { unRecord :: Seq Term
+  }
+  deriving (Eq, Show)
 
-type Sequence = Seq Term
+newtype Sequence = Sequence
+  { unSeq :: Seq Term
+  }
+  deriving (Eq, Show)
 
 type Problem = Seq Constraint
 
@@ -72,6 +81,15 @@ data MetaTerm
   | MCType Int
   | MSolve MetaTerm
   deriving (Eq)
+
+instance Pretty Telescope where
+  pretty = pretty . unTele
+
+instance Pretty Record where
+  pretty = pretty . unRecord
+
+instance Pretty Sequence where
+  pretty = pretty . unSeq
 
 instance Pretty Term where
   pretty = \case

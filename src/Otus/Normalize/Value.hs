@@ -1,5 +1,7 @@
 module Otus.Normalize.Value (
   EnvItem (..),
+  Domain (..),
+  EnvVal (..),
   Environment (..),
   objLiftEnv,
   envLevel,
@@ -7,7 +9,6 @@ module Otus.Normalize.Value (
   freshVar',
   freshMetaVar,
   freshMetaVar',
-  EnvValue (..),
   Closure (..),
   ObjClosure,
   MetaClosure,
@@ -66,7 +67,7 @@ freshMetaVar env = (val, env ||> val)
 freshMetaVar' :: Environment -> Environment
 freshMetaVar' = snd . freshMetaVar
 
-class EnvValue v where
+class EnvVal v where
   intoItem :: v -> EnvItem
 
   (||>) :: Environment -> v -> Environment
@@ -74,6 +75,11 @@ class EnvValue v where
 
   (||><|) :: Environment -> Seq v -> Environment
   e ||><| s = Env (unEnv e >< fmap intoItem s)
+
+class (Eq v, Show v) => Domain v where
+  type Syntax v
+
+  domVar :: LevelId -> v
 
 -- Closure
 data Closure tm = Closure
@@ -162,13 +168,23 @@ instance Indexable Environment where
   type Item Environment = EnvItem
   (@?) e i = unEnv e @? i
 
-instance EnvValue Value where
+instance Domain Value where
+  type Syntax Value = Term
+
+  domVar lvl = Neutral (NVar lvl) SNil
+
+instance EnvVal Value where
   intoItem = ObjVal
 
-instance EnvValue MetaValue where
+instance Domain MetaValue where
+  type Syntax MetaValue = MetaTerm
+
+  domVar lvl = MNeutral lvl MSNil
+
+instance EnvVal MetaValue where
   intoItem = MetaVal
 
-instance EnvValue EnvItem where
+instance EnvVal EnvItem where
   intoItem = id
 
 vvar :: LevelId -> Value

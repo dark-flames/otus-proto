@@ -39,6 +39,7 @@ default-extensions:
 - DerivingVia
 - DuplicateRecordFields
 - DisambiguateRecordFields
+- TypeApplications
 
 library:
   source-dirs: src

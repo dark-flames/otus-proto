@@ -2,35 +2,24 @@ module Otus.TypeCheck.Error (
   TypeError (..),
   TypeCheckResult,
   doEval,
-  doEvalValue,
-  doEvalComputation,
-  doEvalTeleClosure,
-  doEvalTeleClosureFresh,
+  doEval',
   doEvalClosure,
   doEvalClosureFresh,
-  doEvalMetaClosure,
-  doEvalMetaClosureFresh,
   doEvalApp,
   doEvalMApp,
-  doReadbackTele,
-  doReadback,
-  doReadbackMeta,
+  doQuote,
+  doQuote',
 ) where
 
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize
+import Otus.TypeCheck.Context
 
 data TypeError
-  = EvalError EvalError Term
-  | TeleEvalError EvalError Telescope
-  | ValueEvalError EvalError MetaTerm
-  | ComputationEvalError EvalError MetaTerm
-  | ReadbackError EvalError Value
-  | TelescopeReadbackError EvalError VTelescope
-  | MetaReadbackError EvalError MetaValue
-  | AppEvalError EvalError Term Term
-  | MAppEvalError EvalError MetaTerm MetaTerm
+  = EvalError EvalError String
+  | ReadbackError EvalError String
+  | AppEvalError EvalError String String
   | CannotInferIndex
   | CannotInferObjAsMeta
   | CannotInferMetaAsObj
@@ -54,85 +43,64 @@ data TypeError
   | ExpectedToBeMetaFn MetaTerm MetaTerm
   | ExpectedToBeNonEmptyRecord Term Term
   | AnyhowTyErr String
-  deriving (Eq, Show)
+  deriving (Show)
 
 type TypeCheckResult = Result TypeError
 
-doEval :: Term -> Environment -> TypeCheckResult Value
-doEval tm env =
-  case evaluate tm env of
+doEval
+  :: (Evaluatable tm)
+  => Context -> tm -> TypeCheckResult (EvalRes tm)
+doEval ctx tm =
+  case evaluate tm (ctxEnv ctx) of
     Success v -> return v
-    Failure e -> Failure $ EvalError e tm
+    Failure e -> Failure $ EvalError e (show tm)
 
-doEvalValue :: MetaTerm -> Environment -> TypeCheckResult MetaValue
-doEvalValue tm env =
-  -- mapEvalResult $ evaluateMetaValue tm env
-  case evaluateMetaValue tm env of
+doEval'
+  :: (EnvVal v, Evaluatable tm)
+  => Context -> [v] -> tm -> TypeCheckResult (EvalRes tm)
+doEval' ctx p tm =
+  case evaluate tm (ctxEnv ctx ||><| fromList p) of
     Success v -> return v
-    Failure e -> Failure $ ValueEvalError e tm
+    Failure e -> Failure $ EvalError e (show tm)
 
-doEvalComputation :: MetaTerm -> Environment -> TypeCheckResult MetaValue
-doEvalComputation tm env = case evaluateMetaComputation tm env of
-  Success v -> return v
-  Failure e -> Failure $ ComputationEvalError e tm
-
-doEvalTeleClosure :: Value -> TeleClosure -> TypeCheckResult VTelescope
-doEvalTeleClosure val cls = case evaluateTeleClosure val cls of
-  Success v -> return v
-  Failure e -> Failure $ TeleEvalError e (clsTm cls)
-
-doEvalTeleClosureFresh :: TeleClosure -> TypeCheckResult VTelescope
-doEvalTeleClosureFresh cls = case evaluateTeleClosureFresh cls of
-  Success v -> return v
-  Failure e -> Failure $ TeleEvalError e (clsTm cls)
-
-doEvalClosure :: Value -> ObjClosure -> TypeCheckResult Value
+doEvalClosure
+  :: (EnvVal (ClsParam tm), Evaluatable tm)
+  => ClsParam tm -> Closure tm -> TypeCheckResult (EvalRes tm)
 doEvalClosure val cls = case evaluateClosure val cls of
   Success v -> return v
-  Failure e -> Failure $ EvalError e (clsTm cls)
+  Failure e -> Failure $ EvalError e (show (clsTm cls))
 
-doEvalClosureFresh :: ObjClosure -> TypeCheckResult Value
+doEvalClosureFresh
+  :: (Domain (ClsParam tm), EnvVal (ClsParam tm), Evaluatable tm)
+  => Closure tm -> TypeCheckResult (EvalRes tm)
 doEvalClosureFresh cls = case evaluateClosureFresh cls of
   Success v -> return v
-  Failure e -> Failure $ EvalError e (clsTm cls)
+  Failure e -> Failure $ EvalError e (show (clsTm cls))
 
-doEvalMetaClosure :: MetaValue -> MetaClosure -> TypeCheckResult MetaValue
-doEvalMetaClosure val cls = case evaluateMetaClosure val cls of
-  Success v -> return v
-  Failure e -> Failure $ ComputationEvalError e (clsTm cls)
+doQuote
+  :: (Quotable v)
+  => Context -> v -> TypeCheckResult (QuoteRes v)
+doQuote ctx = doQuote' (ctxLvl ctx)
 
-doEvalMetaClosureFresh :: MetaClosure -> TypeCheckResult MetaValue
-doEvalMetaClosureFresh cls = case evaluateMetaClosureFresh cls of
-  Success v -> return v
-  Failure e -> Failure $ ComputationEvalError e (clsTm cls)
-
-doReadbackTele :: LevelId -> VTelescope -> TypeCheckResult Telescope
-doReadbackTele lvl tele = case readbackTelescope lvl tele of
+doQuote'
+  :: (Quotable v)
+  => LevelId -> v -> TypeCheckResult (QuoteRes v)
+doQuote' lvl v = case quote lvl v of
   Success t -> return t
-  Failure e -> Failure $ TelescopeReadbackError e tele
-
-doReadback :: LevelId -> Value -> TypeCheckResult Term
-doReadback lvl v = case readback lvl v of
-  Success t -> return t
-  Failure e -> Failure $ ReadbackError e v
-
-doReadbackMeta :: LevelId -> MetaValue -> TypeCheckResult MetaTerm
-doReadbackMeta lvl v = case readbackMeta lvl v of
-  Success t -> return t
-  Failure e -> Failure $ MetaReadbackError e v
+  Failure e -> Failure $ ReadbackError e (show v)
 
 doEvalApp :: LevelId -> Value -> Value -> TypeCheckResult Value
 doEvalApp lvl f p = case evaluateApp f p of
   Success v -> return v
   Failure e -> do
-    fTm <- doReadback lvl f
-    pTm <- doReadback lvl p
-    Failure $ AppEvalError e fTm pTm
+    fTm <- doQuote' lvl f
+    pTm <- doQuote' lvl p
+    Failure $ AppEvalError e (show fTm) (show pTm)
 
 doEvalMApp :: LevelId -> MetaValue -> MetaValue -> TypeCheckResult MetaValue
 doEvalMApp lvl f p = case evaluateMApp f p of
   Success v -> return v
   Failure e -> do
-    fTm <- doReadbackMeta lvl f
-    pTm <- doReadbackMeta lvl p
-    Failure $ MAppEvalError e fTm pTm
+    fTm <- doQuote' lvl f
+    pTm <- doQuote' lvl p
+    Failure $ AppEvalError e (show fTm) (show pTm)
