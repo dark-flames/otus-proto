@@ -11,7 +11,8 @@ module Otus.Normalize.Value (
   Closure (..),
   ObjClosure,
   MetaClosure,
-  VTelescope,
+  TeleClosure,
+  VTelescope (..),
   VRecord,
   VSequence,
   VConstraint (..),
@@ -86,7 +87,12 @@ type ObjClosure = Closure Term
 type MetaClosure = Closure MetaTerm
 
 -- Object
-type VTelescope = Seq Value
+type TeleClosure = Closure Telescope
+
+data VTelescope
+  = VTNil
+  | VTCons Value TeleClosure
+  deriving (Eq, Show)
 
 type VRecord = Seq Value
 
@@ -107,7 +113,7 @@ data Spine
 
 data Stuck
   = NVar LevelId
-  | NSplicing LevelId MetaSpine
+  | NSplicing LevelId
   deriving (Eq, Show)
 
 data Value
@@ -144,7 +150,7 @@ data MetaValue
   | MVVType Int
   | MVLift VTelescope
   | MVQuote VRecord
-  | MVDyn VTelescope VTelescope
+  | MVDyn VTelescope TeleClosure
   | MVNil Int
   | MVExt MetaValue Int VProblem Environment Sequence
   deriving (Eq, Show)

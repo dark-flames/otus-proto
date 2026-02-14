@@ -33,7 +33,7 @@ data WfComputation = WfComputation
   deriving (Eq, Show)
 
 data WfTerm = WfTerm
-  { tm :: MetaTerm,
-    tyOf :: MetaType
+  { tm :: Term,
+    tyOf :: Type
   }
   deriving (Eq, Show)

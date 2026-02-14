@@ -9,7 +9,7 @@ buildNat :: Int -> MetaTerm
 buildNat 0 = zero
 buildNat x =
   let prev = buildNat $ x - 1
-  in MApp (MTyAnnontation suc sucTy) (MThunk prev)
+  in MApp (MTyAnnotation suc sucTy) (MThunk prev)
 
 -- defs
 nat :: MetaTerm
@@ -26,6 +26,7 @@ zero = mLam 3 $ MReturn (mvar 1)
 
 sucTy :: MetaTerm
 sucTy = MPi (MU mempty nat) mempty nat
+
 -- \n.\A.\z.\s. s (n A z s) -- let (n A z s) in s 0
 suc :: MetaTerm
 suc =
@@ -40,7 +41,6 @@ suc =
       )
       (MApp (MForce $ mvar 1) (mvar 0))
       (MF $ mvar 3)
-
 
 natTests :: Test
 natTests =

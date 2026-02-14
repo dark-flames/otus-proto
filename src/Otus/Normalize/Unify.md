@@ -106,8 +106,8 @@ liftEvalResult eval = lift $ ResultT (pure eval)
 doEvalApp :: Value -> Value -> SolveMonad Value
 doEvalApp fn arg = liftEvalResult $ evalApp fn arg
 
-doEvalClosure :: Value -> ObjClosure -> SolveMonad Value
-doEvalClosure arg cls = liftEvalResult $ evalClosure arg cls
+doEvalMetaClosure :: Value -> ObjClosure -> SolveMonad Value
+doEvalMetaClosure arg cls = liftEvalResult $ evalClosure arg cls
 
 conflict :: SolveMonad a
 conflict = lift $ ResultT Conflict
@@ -142,8 +142,8 @@ unifyTm ctxSize lhs rhs = do
     (OVPi lDom lCls, OVPi rDom rCls) -> do
       domEq <- unifyTm ctxSize lDom rDom
       bind <- freshBind
-      lCod <- doEvalClosure bind lCls
-      rCod <- doEvalClosure bind rCls
+      lCod <- doEvalMetaClosure bind lCls
+      rCod <- doEvalMetaClosure bind rCls
       codEq <- unifyTm (ctxSize + 1) lCod rCod
       return $ domEq >< codEq
     (OVType, OVType) -> return empty
@@ -155,13 +155,13 @@ unifyTm ctxSize lhs rhs = do
     (OVNeutral (ONFlex _ _), OVNeutral (ONFlex _ _)) -> keepConstraint
     (OVLam lCls, _) -> do
       bind <- freshBind
-      lBody <- doEvalClosure bind lCls
+      lBody <- doEvalMetaClosure bind lCls
       rBody <- doEvalApp rhs' bind
       unifyTm (ctxSize + 1) lBody rBody
     (_, OVLam rCls) -> do
       bind <- freshBind
       lBody <- doEvalApp lhs' bind
-      rBody <- doEvalClosure bind rCls
+      rBody <- doEvalMetaClosure bind rCls
       unifyTm (ctxSize + 1) lBody rBody
     (OVNeutral (ONFlex lh ls), _) -> solve ctxSize lh ls rhs'
     (_, OVNeutral (ONFlex rh rs)) -> solve ctxSize rh rs lhs'
@@ -247,12 +247,12 @@ rename ctxSize m = go
               Nothing -> conflict -- todo: keep?
               Just lvl -> goSpine pren (Var $ toIndex ctxSize lvl) sp
           OVLam cls -> do
-            body <- doEvalClosure (vVar $ LevelId $ prCod pren) cls
+            body <- doEvalMetaClosure (vVar $ LevelId $ prCod pren) cls
             bodyTm <- go (liftPRenaming pren) body
             return $ Lam bodyTm
           OVPi a cls -> do
             aTm <- go pren a
-            b <- doEvalClosure (vVar $ LevelId $ prCod pren) cls
+            b <- doEvalMetaClosure (vVar $ LevelId $ prCod pren) cls
             bTm <- go (liftPRenaming pren) b
             return $ Pi aTm bTm
           OVType -> return OType

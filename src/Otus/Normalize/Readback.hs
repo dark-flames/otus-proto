@@ -1,19 +1,48 @@
 module Otus.Normalize.Readback (
+  readbackTelescope,
+  readback,
   readbackMeta,
 ) where
 
 import Control.Monad.Error.Class (MonadError (throwError))
 
 import Otus.Ast
+import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Error
 import Otus.Normalize.Eval
 import Otus.Normalize.Value
 
+readbackClosure :: LevelId -> ObjClosure -> EvalResult Term
+readbackClosure lvl cls = do
+  b <- evaluateClosure (vvar lvl) cls
+  readback (incrLvl lvl) b
+
 readbackMetaClosure :: LevelId -> MetaClosure -> EvalResult MetaTerm
 readbackMetaClosure lvl cls = do
   b <- evaluateMetaClosure (mvvar lvl) cls
   readbackMeta (incrLvl lvl) b
+
+readbackTelescope :: LevelId -> VTelescope -> EvalResult Telescope
+readbackTelescope _ VTNil = return Empty
+readbackTelescope lvl (VTCons ty cls) = do
+  tyTm <- readback lvl ty
+  rst <- evaluateTeleClosureFresh cls
+  rTm <- readbackTelescope (incrLvl lvl) rst
+  return $ tyTm :<| rTm
+
+readbackRecord :: LevelId -> VRecord -> EvalResult Record
+readbackRecord lvl = mapM (readback lvl)
+
+readbackSpine :: LevelId -> Term -> Spine -> EvalResult Term
+readbackSpine lvl stuck = \case
+  SNil -> return stuck
+  SApp s p -> do
+    sTm <- readbackSpine lvl stuck s
+    pTm <- readback lvl p
+    return $ App sTm pTm
+  SFirst s -> First <$> readbackSpine lvl stuck s
+  SRest s -> Rest <$> readbackSpine lvl stuck s
 
 readbackMetaSpine :: LevelId -> MetaTerm -> MetaSpine -> EvalResult MetaTerm
 readbackMetaSpine lvl stuck = \case
@@ -46,3 +75,19 @@ readbackMeta lvl = \case
   MVThunk c -> MThunk <$> readbackMeta lvl c
   MVVType l -> return $ MVType l
   _ -> throwError $ Anyhow "unimplement"
+
+readback :: LevelId -> Value -> EvalResult Term
+readback lvl = \case
+  Neutral stuck spine -> do
+    h <- case stuck of
+      NVar l -> return $ Var $ toIndex lvl l
+      NSplicing l -> return $ Splicing $ MVar (toIndex lvl l)
+    readbackSpine lvl h spine
+  VPi dom cls -> do
+    domTm <- readback lvl dom
+    codTm <- readbackClosure lvl cls
+    return $ Pi domTm codTm
+  VLam cls -> Lam Nothing <$> readbackClosure lvl cls
+  VRecord tele -> Record <$> readbackTelescope lvl tele
+  VList list -> List <$> readbackRecord lvl list
+  VType l -> return $ Type l

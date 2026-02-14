@@ -25,11 +25,14 @@ data Constraint
   = TmEq Int Term Term
   deriving (Eq, Show)
 
+type OptionalTy = Maybe Term
+
 data Term
   = Var IndexId
+  | TyAnnotation Term Term
   | -- Pi type
     Pi Term Term
-  | Lam Term
+  | Lam OptionalTy Term
   | App Term Term
   | -- Record
     Record Telescope
@@ -42,12 +45,12 @@ data Term
     Type Int
   deriving (Eq, Show)
 
-type OptionalTy = Maybe MetaTerm
+type OptionalMetaTy = Maybe MetaTerm
 
 data MetaTerm
   = -- Value
     MVar IndexId
-  | MTyAnnontation MetaTerm MetaTerm
+  | MTyAnnotation MetaTerm MetaTerm
   | MU EffectSet MetaTerm
   | MThunk MetaTerm
   | MVType Int
@@ -59,7 +62,7 @@ data MetaTerm
   | MExt MetaTerm Int Problem Sequence
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm
-  | MLam OptionalTy MetaTerm
+  | MLam OptionalMetaTy MetaTerm
   | MApp MetaTerm MetaTerm
   | MF MetaTerm
   | MReturn MetaTerm
@@ -70,10 +73,26 @@ data MetaTerm
   | MSolve MetaTerm
   deriving (Eq)
 
+instance Pretty Term where
+  pretty = \case
+    Var i -> "%" ++ show (unIndex i)
+    TyAnnotation t ty -> pretty t ++ ":: (" ++ pretty ty ++ ")"
+    Pi dom cod -> "Π(" ++ pretty dom ++ ")." ++ pretty cod ++ ")"
+    Lam oty body -> case oty of
+      Nothing -> "λ. (" ++ pretty body ++ ")"
+      Just t -> "λ(" ++ pretty t ++ "). (" ++ pretty body ++ ")"
+    App f p -> pretty f ++ " ∘ " ++ pretty p
+    Record tele -> "Record{" ++ pretty tele ++ "}"
+    List record -> "[" ++ pretty record ++ "]"
+    First t -> "fst(" ++ pretty t ++ ")"
+    Rest t -> "rst(" ++ pretty t ++ ")"
+    Splicing t -> "<" ++ pretty t ++ ">"
+    Type i -> "Ty(" ++ show i ++ ")"
+
 instance Pretty MetaTerm where
   pretty = \case
     MVar i -> "%" ++ show (unIndex i)
-    MTyAnnontation t ty -> pretty t ++ ":: (" ++ pretty ty ++ ")"
+    MTyAnnotation t ty -> pretty t ++ ":: (" ++ pretty ty ++ ")"
     MU eff t -> "U(" ++ pretty eff ++ " ! " ++ pretty t ++ ")"
     MThunk t -> "[" ++ pretty t ++ "]"
     MVType i -> "VTy(" ++ show i ++ ")"
