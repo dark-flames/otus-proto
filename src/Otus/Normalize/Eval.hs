@@ -31,17 +31,13 @@ evaluateMForce = \case
 evaluateMApp :: MetaValue -> MetaValue -> EvalResult MetaValue
 evaluateMApp vFn vParam = case vFn of
   MVLam cls -> evaluateMetaClosure vParam cls
-  MVTrigger e (MVPi dom _ cls) -> do
-    res <- evaluateMetaClosure (MVTrigger e dom) cls
-    return $ MVTrigger e res
+  MVTrigger e -> return $ MVTrigger e
   MNeutral h spine -> return $ MNeutral h (MSApp spine vParam)
   _ -> throwError AppOnNonLambda
 
 evaluateMBind :: MetaValue -> MetaClosure -> MetaClosure -> EvalResult MetaValue
 evaluateMBind prev curCls tyCls = case prev of
-  MVTrigger eff _ -> do
-    cty <- evaluateMetaClosure (MVThunk prev) tyCls
-    return $ MVTrigger eff cty
+  MVTrigger e -> return $ MVTrigger e
   MVReturn val -> evaluateMetaClosure val curCls
   MNeutral h spine -> return $ MNeutral h (MSBind spine curCls tyCls)
   _ -> throwError BindOnNonComputation
@@ -61,6 +57,7 @@ evaluateMetaValue tm env = case tm of
     Nothing -> throwError $ UnboundIndex idx
     Just (ObjVal _) -> throwError $ InvalidObjVar idx
     Just (MetaVal val) -> return val
+  MTyAnnontation t _ -> evaluateMetaValue t env
   MU effs ty -> do
     vTy <- evaluateMetaComputation ty env
     return $ MVU effs vTy
@@ -81,11 +78,12 @@ evaluateMetaValue tm env = case tm of
 
 evaluateMetaComputation :: MetaTerm -> Environment -> EvalResult MetaValue
 evaluateMetaComputation ctm env = case ctm of
+  MTyAnnontation t _ -> evaluateMetaComputation t env
   MPi dom eff cod -> do
     vDom <- evaluateMetaValue dom env
     let cls = Closure env cod
     return $ MVPi vDom eff cls
-  MLam body -> return $ MVLam (Closure env body)
+  MLam _ body -> return $ MVLam (Closure env body)
   MApp f p -> do
     vP <- evaluateMetaValue p env
     cF <- evaluateMetaComputation f env
@@ -94,11 +92,11 @@ evaluateMetaComputation ctm env = case ctm of
     vTy <- evaluateMetaValue ty env
     return $ MVF vTy
   MReturn tm -> MVReturn <$> evaluateMetaValue tm env
-  MTrigger eff ty -> MVTrigger eff <$> evaluateMetaComputation ty env
+  MTrigger e -> return $ MVTrigger e
   MCType lvl -> return $ MVCType lvl
-  MLetIn prev cur ty -> do
+  MLetIn prev cur bindTy -> do
     cPrev <- evaluateMetaComputation prev env
-    evaluateMBind cPrev (Closure env cur) (Closure env ty)
+    evaluateMBind cPrev (Closure env cur) (Closure env bindTy)
   MForce tm -> do
     val <- evaluateMetaValue tm env
     evaluateMForce val

@@ -13,7 +13,8 @@ import qualified Data.Set as S
 import Otus.Common
 
 data Effect
-  = Unification
+  = Exception
+  | Unification
   | NonTermination
   deriving (Eq, Ord, Show)
 
@@ -42,6 +43,7 @@ instance Pretty Effect where
   pretty = \case
     Unification -> "u"
     NonTermination -> "t"
+    Exception -> "e"
 
 instance Pretty EffectSet where
   pretty s =

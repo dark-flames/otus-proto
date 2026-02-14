@@ -63,7 +63,7 @@ computationConv lvl lhs rhs = case (lhs, rhs) of
     computationConv (incrLvl lvl) lRes rRes
   (MVF lv, MVF rv) -> valueConv lvl lv rv
   (MVReturn lv, MVReturn rv) -> valueConv lvl lv rv
-  (MVTrigger le _, MVTrigger re _) -> return $ le == re
+  (MVTrigger le, MVTrigger re) -> return $ le == re
   (MVCType l, MVCType l') -> return $ l <= l'
   (MNeutral lh ls, MNeutral rh rs) ->
     if lh == rh then

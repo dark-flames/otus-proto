@@ -28,6 +28,10 @@ inferValue ctx preTm = case preTm of
           }
     Just (ObjTy _) -> throwError CannotInferObjAsMeta
     _ -> throwError CannotInferIndex
+  MTyAnnontation preVTm preVTy -> do
+    (vTy, _) <- inferValueTy ctx preVTy
+    vVTy <- doEvalValue (vtm vTy) (ctxEnv ctx)
+    checkValue ctx preVTm vVTy
   MU e c -> do
     (cTy, l) <- inferComputationTy ctx c
     return $
@@ -54,6 +58,10 @@ inferValue ctx preTm = case preTm of
 
 inferComputation :: Context -> MetaTerm -> TypeCheckResult WfComputation
 inferComputation ctx preTm = case preTm of
+  MTyAnnontation preCTm preCTy -> do
+    (cTy, _) <- inferComputationTy ctx preCTy
+    vCTy <- doEvalComputation (ctm cTy) (ctxEnv ctx)
+    checkComputation ctx preCTm vCTy
   MPi dom eff cod -> do
     -- Γ |- Dom vtype @ domL
     (domVTy, domL) <- inferValueTy ctx dom
@@ -106,18 +114,6 @@ inferComputation ctx preTm = case preTm of
         { ctm = MReturn $ vtm vTm,
           effOf = mempty,
           ctyOf = MVF (vtyOf vTm)
-        }
-  MTrigger e c -> do
-    -- Γ |- C ctype
-    (cTy, _) <- inferComputationTy ctx c
-    vCTy <- doEvalComputation (ctm cTy) (ctxEnv ctx)
-
-    -- Γ |- trigger(e, C) : {e} ! C
-    return $
-      WfComputation
-        { ctm = MTrigger e (ctm cTy),
-          effOf = singletonEff e,
-          ctyOf = vCTy
         }
   MLetIn prev bind bindTy -> do
     -- Γ |- prev :> e ! F(A)
@@ -224,12 +220,25 @@ checkValue ctx preTm vTy = case (preTm, vTy) of
 
 checkComputation :: Context -> MetaTerm -> MetaType -> TypeCheckResult WfComputation
 checkComputation ctx preTm cTy = case (preTm, cTy) of
-  (MLam body, MVPi dom eff cls) -> do
+  (MLam oty body, MVPi dom eff cls) -> do
+    domTy <- case oty of
+      Nothing -> return dom
+      Just aty -> do
+        (aTyTm, _) <- inferValueTy ctx aty
+        vATy <- doEvalValue (vtm aTyTm) (ctxEnv ctx)
+        conv <- computationConv (ctxLvl ctx) vATy dom
+        if conv then
+          return vATy
+        else do
+          let lvl = ctxLvl ctx
+          domTm <- doReadbackMeta lvl dom
+          throwError $ ComputationUnify preTm aty domTm
+
     cod <- doEvalClosureFresh cls
-    bodyTm <- checkComputation (ctx |:> dom) body cod
+    bodyTm <- checkComputation (ctx |:> domTy) body cod
     return $
       WfComputation
-        { ctm = MLam $ ctm bodyTm,
+        { ctm = MLam oty $ ctm bodyTm,
           effOf = mempty,
           ctyOf = MVPi dom (eff \/ effOf bodyTm) cls
         }
@@ -240,6 +249,14 @@ checkComputation ctx preTm cTy = case (preTm, cTy) of
         { ctm = MReturn $ vtm vTm,
           effOf = mempty,
           ctyOf = MVF (vtyOf vTm)
+        }
+  (MTrigger e, _) -> do
+    -- Γ |- trigger(e, C) : {e} ! C
+    return $
+      WfComputation
+        { ctm = MTrigger e,
+          effOf = singletonEff e,
+          ctyOf = cTy
         }
   _ -> do
     cTm <- inferComputation ctx preTm

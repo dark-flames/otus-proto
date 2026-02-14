@@ -4,5 +4,5 @@ cradle:
     components:
       - path: "./src"
         component: "otus-proto:lib"
-      - path: "./tests/TestMain.hs"
+      - path: "./tests/Main.hs"
         component: "otus-proto:test:tests"

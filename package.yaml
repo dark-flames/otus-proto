@@ -45,7 +45,7 @@ library:
 
 tests:
   tests:
-    main:                TestMain.hs
+    main:                Main.hs
     source-dirs:         
     - tests
     dependencies:

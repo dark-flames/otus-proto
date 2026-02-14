@@ -1,4 +1,10 @@
-module CBPV.Helper (assertCheck) where
+module CBPV.Helper (
+  assertCheck,
+  mvar,
+  mPiTy,
+  mLam,
+  mApp,
+) where
 
 import Test.HUnit
 
@@ -45,3 +51,16 @@ assertCheck name preTm preTy =
                ++ pretty preTy
                ++ "\n"
            )
+
+mvar :: Int -> MetaTerm
+mvar = MVar . IndexId
+
+mPiTy :: [MetaTerm] -> MetaTerm -> MetaTerm
+mPiTy = foldr (\dom -> (.) (MPi dom mempty)) id
+
+mApp :: MetaTerm -> [MetaTerm] -> MetaTerm
+mApp = foldl MApp
+
+mLam :: Int -> MetaTerm -> MetaTerm
+mLam 0 = id
+mLam n = mLam (n - 1) . MLam Nothing

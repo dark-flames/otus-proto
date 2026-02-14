@@ -1,28 +1,15 @@
-module CBPV.Basic (basicTests, buildNat) where
+module CBPV.Nat (natTests, buildNat) where
 
 import Test.HUnit
 
 import CBPV.Helper
 import Otus
 
-mvar :: Int -> MetaTerm
-mvar = MVar . IndexId
-
-mPiTy :: [MetaTerm] -> MetaTerm -> MetaTerm
-mPiTy = foldr (\dom -> (.) (MPi dom mempty)) id
-
-mApp :: MetaTerm -> [MetaTerm] -> MetaTerm
-mApp = foldl MApp
-
-mLam :: Int -> MetaTerm -> MetaTerm
-mLam 0 = id
-mLam n = mLam (n - 1) . MLam
-
 buildNat :: Int -> MetaTerm
 buildNat 0 = zero
 buildNat x =
   let prev = buildNat $ x - 1
-  in MLetIn prev (MApp suc (mvar 0)) nat
+  in MApp (MTyAnnontation suc sucTy) (MThunk prev)
 
 -- defs
 nat :: MetaTerm
@@ -37,6 +24,8 @@ nat =
 zero :: MetaTerm
 zero = mLam 3 $ MReturn (mvar 1)
 
+sucTy :: MetaTerm
+sucTy = MPi (MU mempty nat) mempty nat
 -- \n.\A.\z.\s. s (n A z s) -- let (n A z s) in s 0
 suc :: MetaTerm
 suc =
@@ -52,10 +41,12 @@ suc =
       (MApp (MForce $ mvar 1) (mvar 0))
       (MF $ mvar 3)
 
-basicTests :: Test
-basicTests =
+
+natTests :: Test
+natTests =
   TestList
     [ TestCase $ assertCheck "nat-is-ctype" nat (MCType 10),
       TestCase $ assertCheck "zero-is-nat" zero nat,
-      TestCase $ assertCheck "suc-is-nat-map" suc (MPi (MU mempty nat) mempty nat)
+      TestCase $ assertCheck "suc-is-nat-map" suc sucTy,
+      TestCase $ assertCheck "7-is-nat" (buildNat 7) nat
     ]

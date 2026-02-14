@@ -42,9 +42,12 @@ data Term
     Type Int
   deriving (Eq, Show)
 
+type OptionalTy = Maybe MetaTerm
+
 data MetaTerm
   = -- Value
     MVar IndexId
+  | MTyAnnontation MetaTerm MetaTerm
   | MU EffectSet MetaTerm
   | MThunk MetaTerm
   | MVType Int
@@ -56,11 +59,11 @@ data MetaTerm
   | MExt MetaTerm Int Problem Sequence
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm
-  | MLam MetaTerm
+  | MLam OptionalTy MetaTerm
   | MApp MetaTerm MetaTerm
   | MF MetaTerm
   | MReturn MetaTerm
-  | MTrigger Effect MetaTerm
+  | MTrigger Effect
   | MLetIn MetaTerm MetaTerm MetaTerm
   | MForce MetaTerm
   | MCType Int
@@ -70,16 +73,19 @@ data MetaTerm
 instance Pretty MetaTerm where
   pretty = \case
     MVar i -> "%" ++ show (unIndex i)
+    MTyAnnontation t ty -> pretty t ++ ":: (" ++ pretty ty ++ ")"
     MU eff t -> "U(" ++ pretty eff ++ " ! " ++ pretty t ++ ")"
     MThunk t -> "[" ++ pretty t ++ "]"
     MVType i -> "VTy(" ++ show i ++ ")"
     MPi dom eff cod -> "Π(" ++ pretty dom ++ ")." ++ pretty eff ++ "!" ++ pretty cod ++ ")"
-    MLam body -> "λ. (" ++ pretty body ++ ")"
+    MLam oty body -> case oty of
+      Nothing -> "λ. (" ++ pretty body ++ ")"
+      Just t -> "λ(" ++ pretty t ++ "). (" ++ pretty body ++ ")"
     MApp f p -> pretty f ++ " ∘ " ++ pretty p
     MF t -> "F(" ++ pretty t ++ ")"
     MReturn t -> "return(" ++ pretty t ++ ")"
-    MTrigger eff t -> "trigger(" ++ pretty eff ++ " ! " ++ pretty t ++ ")"
-    MLetIn p b t -> "let (" ++ pretty p ++ ") in " ++ pretty b ++ " :: " ++ pretty t
+    MTrigger eff -> "trigger(" ++ pretty eff ++ ")"
+    MLetIn p b bTy -> "let (" ++ pretty p ++ ") in " ++ pretty b ++ " ::(" ++ pretty bTy ++ ")"
     MForce t -> "force(" ++ pretty t ++ ")"
     MCType i -> "CTy(" ++ show i ++ ")"
     _ -> "undefinded"

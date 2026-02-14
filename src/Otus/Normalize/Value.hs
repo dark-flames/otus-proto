@@ -136,7 +136,7 @@ data MetaValue
   | MVLam MetaClosure
   | MVF MetaValue
   | MVReturn MetaValue
-  | MVTrigger Effect MetaValue
+  | MVTrigger Effect
   | MVCType Int
   | -- Value
     MVU EffectSet MetaValue

@@ -23,11 +23,11 @@ readbackMetaSpine lvl stuck = \case
     pTm <- readbackMeta lvl p
     return $ MApp sTm pTm
   MSForce s -> MForce <$> readbackMetaSpine lvl stuck s
-  MSBind prev bCls tCls -> do
+  MSBind prev bCls tyCls -> do
     prevTm <- readbackMetaSpine lvl stuck prev
     bTm <- readbackMetaClosure lvl bCls
-    tTm <- readbackMetaClosure lvl tCls
-    return $ MLetIn prevTm bTm tTm
+    bindTyTm <- readbackMetaClosure lvl tyCls
+    return $ MLetIn prevTm bTm bindTyTm
   _ -> throwError $ Anyhow "unimplement"
 
 readbackMeta :: LevelId -> MetaValue -> EvalResult MetaTerm
@@ -37,10 +37,10 @@ readbackMeta lvl = \case
     domTm <- readbackMeta lvl dom
     codTm <- readbackMetaClosure lvl cls
     return $ MPi domTm e codTm
-  MVLam cls -> MLam <$> readbackMetaClosure lvl cls
+  MVLam cls -> MLam Nothing <$> readbackMetaClosure lvl cls
   MVF vty -> MF <$> readbackMeta lvl vty
   MVReturn v -> MReturn <$> readbackMeta lvl v
-  MVTrigger e v -> MTrigger e <$> readbackMeta lvl v
+  MVTrigger e -> return $ MTrigger e
   MVCType l -> return $ MCType l
   MVU e cty -> MU e <$> readbackMeta lvl cty
   MVThunk c -> MThunk <$> readbackMeta lvl c
