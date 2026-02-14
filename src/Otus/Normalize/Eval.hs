@@ -24,9 +24,7 @@ class (Show t) => Evaluatable t where
   evaluateClosure param cls = evaluate (clsTm cls) (clsEnv cls ||> param)
 
   evaluateClosureFresh
-    :: ( Domain (ClsParam t),
-         EnvVal (ClsParam t)
-       )
+    :: (Domain (ClsParam t))
     => Closure t -> EvalResult (EvalRes t)
   evaluateClosureFresh cls = evaluate (clsTm cls) (env ||> p)
     where
@@ -39,9 +37,7 @@ class (Show t) => Evaluatable t where
   evaluateClosureN params cls = evaluate (clsTm cls) (clsEnv cls ||><| params)
 
   evaluateClosureFreshN
-    :: ( Domain (ClsParam t),
-         EnvVal (ClsParam t)
-       )
+    :: (Domain (ClsParam t))
     => Int -> Closure t -> EvalResult (EvalRes t)
   evaluateClosureFreshN n cls = evaluate (clsTm cls) env'
     where

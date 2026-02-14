@@ -36,9 +36,8 @@ data TypeError
   | CannotInferComputation MetaTerm
   | CannotInferTerm Term
   | ComputationEffErr MetaTerm EffectSet EffectSet
-  | CannotCheckAsType Term
-  | ExpectedToBeComputationTy MetaTerm
-  | ExpectedToBeValueTy MetaTerm
+  | CannotCheckAsType String
+  | ExpectedToBeMetaTy MetaTerm
   | ExpectedToBeFn Term Term
   | ExpectedToBeMetaFn MetaTerm MetaTerm
   | ExpectedToBeNonEmptyRecord Term Term
@@ -71,20 +70,16 @@ doEvalClosure val cls = case evaluateClosure val cls of
   Failure e -> Failure $ EvalError e (show (clsTm cls))
 
 doEvalClosureFresh
-  :: (Domain (ClsParam tm), EnvVal (ClsParam tm), Evaluatable tm)
+  :: (Domain (ClsParam tm), Evaluatable tm)
   => Closure tm -> TypeCheckResult (EvalRes tm)
 doEvalClosureFresh cls = case evaluateClosureFresh cls of
   Success v -> return v
   Failure e -> Failure $ EvalError e (show (clsTm cls))
 
-doQuote
-  :: (Quotable v)
-  => Context -> v -> TypeCheckResult (QuoteRes v)
+doQuote :: (Quotable v) => Context -> v -> TypeCheckResult (QuoteRes v)
 doQuote ctx = doQuote' (ctxLvl ctx)
 
-doQuote'
-  :: (Quotable v)
-  => LevelId -> v -> TypeCheckResult (QuoteRes v)
+doQuote' :: (Quotable v) => LevelId -> v -> TypeCheckResult (QuoteRes v)
 doQuote' lvl v = case quote lvl v of
   Success t -> return t
   Failure e -> Failure $ ReadbackError e (show v)

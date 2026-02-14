@@ -1,10 +1,11 @@
 module Otus.TypeCheck.Judgement (
   MetaType,
   Type,
-  MetaTypeKind (..),
-  WfValue (..),
-  WfComputation (..),
+  WfMetaTerm (..),
   WfTerm (..),
+  Judgement (..),
+  wfMetaValue,
+  effOf,
 ) where
 
 import Otus.Ast
@@ -14,26 +15,41 @@ type MetaType = MetaValue
 
 type Type = Value
 
-data MetaTypeKind
-  = Value
-  | Computation
-  deriving (Eq, Show)
-
-data WfValue = WfValue
-  { vtm :: MetaTerm,
-    vtyOf :: MetaValue
+data WfMetaTerm = WfMetaTerm
+  { jTm :: MetaTerm,
+    jEff :: EffectSet,
+    jTy :: MetaType
   }
-  deriving (Eq, Show)
 
-data WfComputation = WfComputation
-  { ctm :: MetaTerm,
-    effOf :: EffectSet,
-    ctyOf :: MetaValue
-  }
-  deriving (Eq, Show)
+wfMetaValue :: MetaTerm -> MetaType -> WfMetaTerm
+wfMetaValue t = WfMetaTerm t mempty
 
 data WfTerm = WfTerm
-  { tm :: Term,
-    tyOf :: Type
+  { jTm :: Term,
+    jTy :: Type
   }
   deriving (Eq, Show)
+
+class Judgement j where
+  type Tm j
+  type TmTy j
+
+  tmOf :: j -> Tm j
+  tyOf :: j -> TmTy j
+
+instance Judgement WfMetaTerm where
+  type Tm WfMetaTerm = MetaTerm
+  type TmTy WfMetaTerm = MetaType
+
+  tmOf (WfMetaTerm t _ _) = t
+  tyOf (WfMetaTerm _ _ t) = t
+
+instance Judgement WfTerm where
+  type Tm WfTerm = Term
+  type TmTy WfTerm = Type
+
+  tmOf (WfTerm tm _) = tm
+  tyOf (WfTerm _ ty) = ty
+
+effOf :: WfMetaTerm -> EffectSet
+effOf (WfMetaTerm _ e _) = e

@@ -13,10 +13,10 @@ import Otus
 assertCheck :: String -> MetaTerm -> MetaTerm -> Assertion
 assertCheck name preTm preTy =
   let split = "\n----------------------" ++ name ++ "-----------------------\n"
-  in case inferComputationTy' emptyCtx preTy of
-       Success (WfComputation cty _ _, vcty, _) ->
-         case checkComputation emptyCtx preTm vcty of
-           Success (WfComputation t eff _) ->
+  in case inferTy' emptyCtx preTy of
+       Success (WfMetaTerm cty _ _, vcty, _) ->
+         case check emptyCtx preTm vcty of
+           Success (WfMetaTerm t eff _) ->
              putStrLn
                ( split
                    ++ "Infer: \n  "

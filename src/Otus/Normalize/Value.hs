@@ -5,10 +5,6 @@ module Otus.Normalize.Value (
   Environment (..),
   objLiftEnv,
   envLevel,
-  freshVar,
-  freshVar',
-  freshMetaVar,
-  freshMetaVar',
   Closure (..),
   ObjClosure,
   MetaClosure,
@@ -51,22 +47,6 @@ objLiftEnv n env = env ||><| fmap f (fromList [s .. s + n])
     s = size env
     f = vvar . LevelId
 
-freshVar :: Environment -> (Value, Environment)
-freshVar env = (val, env ||> val)
-  where
-    val = vvar $ envLevel env
-
-freshVar' :: Environment -> Environment
-freshVar' = snd . freshVar
-
-freshMetaVar :: Environment -> (MetaValue, Environment)
-freshMetaVar env = (val, env ||> val)
-  where
-    val = mvvar $ envLevel env
-
-freshMetaVar' :: Environment -> Environment
-freshMetaVar' = snd . freshMetaVar
-
 class EnvVal v where
   intoItem :: v -> EnvItem
 
@@ -76,7 +56,7 @@ class EnvVal v where
   (||><|) :: Environment -> Seq v -> Environment
   e ||><| s = Env (unEnv e >< fmap intoItem s)
 
-class (Eq v, Show v) => Domain v where
+class (EnvVal v, Eq v, Show v) => Domain v where
   type Syntax v
 
   domVar :: LevelId -> v

@@ -37,10 +37,14 @@ instance Indexable Context where
   (@?) ctx i = tys ctx @? i
 
 instance ContextTy MetaValue where
-  intoSeg t = (MetaTy t, freshMetaVar')
+  intoSeg t = (MetaTy t, f)
+    where
+      f env = env ||> mvvar (envLevel env)
 
 instance ContextTy Value where
-  intoSeg t = (ObjTy t, freshVar')
+  intoSeg t = (ObjTy t, f)
+    where
+      f env = env ||> vvar (envLevel env)
 
 ctxLvl :: Context -> LevelId
 ctxLvl = envLevel . ctxEnv
