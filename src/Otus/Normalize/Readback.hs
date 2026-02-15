@@ -45,6 +45,11 @@ quoteSpine lvl stuck = \case
     return $ App sTm pTm
   SFirst s -> First <$> quoteSpine lvl stuck s
   SRest s -> Rest <$> quoteSpine lvl stuck s
+  SJ fam p s -> do
+    famTm <- quote (incrLvl $ incrLvl lvl) fam
+    pTm <- quote lvl p
+    sTm <- quoteSpine lvl stuck s
+    return $ J famTm pTm sTm
 
 instance Quotable Value where
   type QuoteRes Value = Term
@@ -61,6 +66,12 @@ instance Quotable Value where
     VLam cls -> Lam Nothing <$> quote lvl cls
     VRecord tele -> Record <$> quote lvl tele
     VList list -> List <$> quote lvl list
+    VId ty lhs rhs -> do
+      tyTm <- quote lvl ty
+      lhsTm <- quote lvl lhs
+      rhsTm <- quote lvl rhs
+      return $ Id tyTm lhsTm rhsTm
+    VRefl -> return Refl
     VType l -> return $ Type l
 
 -- Meta Language Readback

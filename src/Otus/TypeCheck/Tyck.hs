@@ -35,22 +35,31 @@ class (Pretty tm) => TypeCheck tm where
 inferTelescope :: Context -> Telescope -> TypeCheckResult (Telescope, Int)
 inferTelescope c t = mapFst TeleSeq <$> go c (unTele t)
   where
+    -- Γ |- Nil tele @ 0
     go _ Empty = return (Empty, 0)
     go ctx (preTy :<| rest) = do
+      -- Γ |- A :> type @ l
       (tyTm, ty, l) <- inferTy' ctx preTy
+      -- Γ, A |- Δ tele @ l'
       (restTm, restL) <- go (ctx |:> ty) rest
+      -- Γ |- A, Δ tele @ l /\ l'
       return (tmOf tyTm :<| restTm, max l restL)
 
 checkRecord :: Context -> Record -> VTelescope -> TypeCheckResult Record
 checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
   where
     go ctx preRecord tele = case (preRecord, tele) of
+      -- Γ |- [] : Record Nil
       (Empty, VTNil) -> return Empty
       (preTm :<| restPR, VTCons ty cls) -> do
+        -- Γ |- a : A
         t <- check ctx preTm ty
         v <- doEval ctx (tmOf t)
+        -- Γ |- Δ[a] tele
         restTele <- doEvalClosure v cls
+        -- Γ |- rest <: Record Δ[a]
         restR <- go (ctx |:> ty) restPR restTele
+        -- Γ |- [a, ..rest] <: Record A, Δ
         return $ tmOf t :<| restR
       _ -> do
         teleTm <- doQuote ctx tele
@@ -74,17 +83,23 @@ instance TypeCheck Term where
       ty <- inferTy ctx preTy
       check ctx preTm ty
     Pi dom cod -> do
+      -- Γ |- A type @ l
       (domTm, domTy, domL) <- inferTy' ctx dom
+      -- Γ, A |- B type @ l'
       (codTm, _, codL) <- inferTy' (ctx |:> domTy) cod
+      -- Γ |- Pi(A, B) :> Ty (l \/ l')
       return
         WfTerm
           { jTm = Pi (tmOf domTm) (tmOf codTm),
             jTy = VType $ max domL codL
           }
     Lam (Just preTy) body -> do
+      -- Γ |- A type
       (tyTm, ty, _) <- inferTy' ctx preTy
+      -- Γ, A |- body :> B
       bodyTm <- infer (ctx |:> ty) body
       codTyTm <- doQuote (ctx |:> ty) (tyOf bodyTm)
+      -- Γ |- body :> Pi(A, B)
       return $
         WfTerm
           { jTm = Lam (Just $ tmOf tyTm) (tmOf bodyTm),
@@ -141,6 +156,38 @@ instance TypeCheck Term where
         ty -> do
           tyTm <- doQuote ctx ty
           throwError $ ExpectedToBeNonEmptyRecord preTm tyTm
+    Id preTy preLhs preRhs -> do
+      (idTyTm, idTy, l) <- inferTy' ctx preTy
+      lhsTm <- check ctx preLhs idTy
+      rhsTm <- check ctx preRhs idTy
+      return $
+        WfTerm
+          { jTm = Id (tmOf idTyTm) (tmOf lhsTm) (tmOf rhsTm),
+            jTy = VType l
+          }
+    J preFam preP preEq -> do
+      -- Γ |- eq :> Id(A, lhs, rhs)
+      eqTm <- infer ctx preEq
+      case tyOf eqTm of
+        VId idTy lhs rhs -> do
+          -- Γ, A, Id(A, lhs, var 0) |- Fam type
+          (famTm, _, _) <- inferTy' (ctx |:> idTy |:> VId idTy lhs (vvar 0)) preFam
+          -- Γ |- Fam[id, lhs, refl] type
+          pTy <- doEval' ctx [lhs, VRefl] (tmOf famTm)
+          -- Γ |- p <: Fam[id, lhs, refl]
+          pTm <- check ctx preP pTy
+          vEq <- doEval ctx (tmOf eqTm)
+          -- Γ |- Fam[id, rhs, eq] type
+          resTy <- doEval' ctx [rhs, vEq] (tmOf famTm)
+          -- Γ |- J(Fam, p, eq) :> Fam[id, rhs, eq]
+          return $
+            WfTerm
+              { jTm = J (tmOf famTm) (tmOf pTm) (tmOf eqTm),
+                jTy = resTy
+              }
+        eqTy -> do
+          eqTyTm <- doQuote ctx eqTy
+          throwError $ ExpectedToBeIdeneity preEq eqTyTm
     Splicing preMeta -> do
       meta <- infer ctx preMeta
       case tyOf meta of
@@ -182,6 +229,19 @@ instance TypeCheck Term where
           { jTm = List record,
             jTy = VRecord tele
           }
+    (Refl, VId idTy lhs rhs) -> do
+      c <- conv (ctxLvl ctx) lhs rhs
+      if c then
+        return $
+          WfTerm
+            { jTm = Refl,
+              jTy = VId idTy lhs rhs
+            }
+      else do
+        tyTm <- doQuote ctx idTy
+        lhsTm <- doQuote ctx lhs
+        rhsTm <- doQuote ctx rhs
+        throwError $ CannotCheckRefl tyTm lhsTm rhsTm
     (Splicing preMeta, VRecord tele) -> do
       meta <- check ctx preMeta (MVLift tele)
       return $

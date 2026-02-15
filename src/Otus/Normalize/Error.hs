@@ -12,6 +12,7 @@ data EvalError
   | AppOnNonLambda
   | ProjOnEmptyRecord
   | ProjOnNonRecord
+  | JOnNonId
   | SplicingNonMeta
   | BindOnNonComputation
   | ForceOnNonValue

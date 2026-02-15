@@ -26,6 +26,7 @@ data TypeError
   | CannotCheckRecord Record Telescope
   | CannotCheckAsMetaType MetaTerm MetaTerm
   | CannotCheckAsThunk MetaTerm MetaTerm
+  | CannotCheckRefl Term Term Term
   | CannotForce MetaTerm MetaTerm
   | CannotBindOn MetaTerm MetaTerm
   | CannotSplicing MetaTerm MetaTerm
@@ -41,6 +42,7 @@ data TypeError
   | ExpectedToBeFn Term Term
   | ExpectedToBeMetaFn MetaTerm MetaTerm
   | ExpectedToBeNonEmptyRecord Term Term
+  | ExpectedToBeIdeneity Term Term
   | AnyhowTyErr String
   deriving (Show)
 

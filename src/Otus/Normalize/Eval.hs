@@ -67,6 +67,12 @@ evaluateRest = \case
   Neutral h spine -> return $ Neutral h (SRest spine)
   _ -> throwError ProjOnNonRecord
 
+evaluateJ :: Value -> Value -> Value -> EvalResult Value
+evaluateJ fam p = \case
+  VRefl -> return p
+  Neutral h spine -> return $ Neutral h (SJ fam p spine)
+  _ -> throwError JOnNonId
+
 evaluateSplicing :: MetaValue -> EvalResult Value
 evaluateSplicing = \case
   MVQuote vRecord -> return $ VList vRecord
@@ -85,8 +91,16 @@ instance Evaluatable Telescope where
 instance Evaluatable Record where
   type EvalRes Record = VRecord
   type ClsParam Record = Value
-
   evaluate record env = mapM (`evaluate` env) (unRecord record)
+
+instance Evaluatable Sequence where
+  type EvalRes Sequence = VSequence
+  type ClsParam Sequence = Value
+  evaluate s env = case unSeq s of
+    Empty -> return VSeqNil
+    ty :<| rest -> do
+      vTy <- evaluate ty env
+      return $ VSeqCons vTy (Closure env (Sequence rest))
 
 instance Evaluatable Constraint where
   type EvalRes Constraint = VConstraint
@@ -125,6 +139,17 @@ instance Evaluatable Term where
     List record -> VList <$> evaluate record env
     First l -> evaluate l env >>= evaluateFirst
     Rest l -> evaluate l env >>= evaluateRest
+    Id ty l r -> do
+      vTy <- evaluate ty env
+      vL <- evaluate l env
+      vR <- evaluate r env
+      return $ VId vTy vL vR
+    Refl -> return VRefl
+    J fam p e -> do
+      vFam <- evaluate fam (objLiftEnv 2 env)
+      vP <- evaluate p env
+      vE <- evaluate e env
+      evaluateJ vFam vP vE
     Splicing meta -> do
       vMeta <- evaluate meta env
       evaluateSplicing vMeta
@@ -157,7 +182,7 @@ evaluateSolve d = go d mempty mempty
   where
     go v p segs = case v of
       MVNil _lift -> undefined -- todo: solve lift p >>= fold segs
-      MVExt prev _ p' env s -> go prev (p' >< p) ((env, s) <| segs)
+      MVExt prev _ p' env s -> go prev (p' >< p) ((size p', Closure env s) <| segs)
       MNeutral h spine -> return $ MNeutral h (MSSolveWith spine p segs)
       _ -> throwError SolveOnNonDyn
 

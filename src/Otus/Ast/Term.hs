@@ -48,6 +48,11 @@ data Term
   | List Record
   | First Term
   | Rest Term
+  | Id Term Term Term
+  | Refl
+  | -- Γ |- p : Id(A, x, y)  Γ, A, Id(A, x, v0) |- B type   Γ |- e : B[x, refl]
+    -- Γ |- J(B, e, p) : B[y, e]
+    J Term Term Term
   | -- Embedding
     Splicing MetaTerm
   | -- Universe
@@ -104,6 +109,9 @@ instance Pretty Term where
     List record -> "[" ++ pretty record ++ "]"
     First t -> "fst(" ++ pretty t ++ ")"
     Rest t -> "rst(" ++ pretty t ++ ")"
+    Id t l r -> "Id(" ++ pretty t ++ ", " ++ pretty l ++ ", " ++ pretty r ++ ")"
+    Refl -> "refl"
+    J fam p e -> "j(" ++ pretty fam ++ ", " ++ pretty p ++ ", " ++ pretty e ++ ")"
     Splicing t -> "<" ++ pretty t ++ ">"
     Type i -> "Ty(" ++ show i ++ ")"
 
