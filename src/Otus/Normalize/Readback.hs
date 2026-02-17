@@ -2,12 +2,9 @@ module Otus.Normalize.Readback (
   Quotable (..),
 ) where
 
-import Control.Monad.Error.Class (MonadError (throwError))
-
 import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
-import Otus.Normalize.Error
 import Otus.Normalize.Value
 
 class Quotable v where
@@ -124,7 +121,18 @@ quoteMSpine lvl stuck = \case
     bTm <- quote lvl bHOAS
     bindTyTm <- quote lvl tyHOAS
     return $ MLetIn prevTm bTm bindTyTm
-  _ -> throwError $ Anyhow "unimplement"
+  MSAbsMeta ty spine -> do
+    tyTm <- quote lvl ty
+    sTm <- quoteMSpine (incrLvl lvl) stuck spine
+    return $ MAbsMeta tyTm sTm
+  MSExt spine lift problemHOAS recordHOAS -> do
+    sTm <- quoteMSpine lvl stuck spine
+    problem <- evalHOAS problemHOAS (liftObjEnvN lift)
+    problemTm <- quote (shift lift lvl) problem
+    record <- evalHOAS recordHOAS (liftObjEnvN (lift + size problem))
+    recordTm <- quote (shift (lift + size problem) lvl) record
+    return $ MExt sTm lift problemTm recordTm
+  MSSolve s -> MSolve <$> quoteMSpine lvl stuck s
 
 instance Quotable MetaValue where
   type QuoteRes MetaValue = MetaTerm
@@ -142,4 +150,12 @@ instance Quotable MetaValue where
     MVU e cty -> MU e <$> quote lvl cty
     MVThunk c -> MThunk <$> quote lvl c
     MVVType l -> return $ MVType l
-    _ -> throwError $ Anyhow "unimplement"
+    MVLift t -> MLift <$> quote lvl t
+    MVQuote l -> MQuote <$> quote lvl l
+    MVDyn t -> MDyn <$> quote lvl t
+    MVGuard teleSeq prob recordHOAS -> do
+      tele <- quote lvl teleSeq
+      probTm <- quote (shift (size tele) lvl) prob
+      record <- evalHOAS recordHOAS (liftObjEnvN (size tele + size prob))
+      recordTm <- quote (shift (size tele + size prob) lvl) record
+      return $ MGuard tele probTm recordTm

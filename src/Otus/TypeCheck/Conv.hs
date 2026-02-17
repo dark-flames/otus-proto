@@ -46,6 +46,30 @@ instance ConvCheck VRecord where
       return False
   conv _ _ _ = return False
 
+instance ConvCheck VConstraint where
+  conv lvl (VTmEq lLift lLhs lRhs lTy) (VTmEq rLift rLhs rRhs rTy) =
+    if lLift == rLift then do
+      let l = shift lLift lvl
+      tyConv <- conv l lTy rTy
+      if tyConv then do
+        lhsConv <- conv l lLhs rLhs
+        rhsConv <- conv l lRhs rRhs
+        return $ lhsConv && rhsConv
+      else do
+        return False
+    else
+      return False
+
+instance ConvCheck VProblem where
+  conv _ Empty Empty = return True
+  conv lvl (lp :<| lr) (rp :<| rr) = do
+    hConv <- conv lvl lp rp
+    if hConv then
+      conv lvl lr rr
+    else
+      return False
+  conv _ _ _ = return False
+
 instance ConvCheck Spine where
   conv lvl lhs rhs = case (lhs, rhs) of
     (SNil, SNil) -> return True
@@ -118,6 +142,19 @@ instance ConvCheck MetaValue where
         return False
     (MVThunk lc, MVThunk rc) -> conv lvl lc rc
     (MVVType l, MVVType l') -> return $ l <= l'
+    (MVLift lTele, MVLift rTele) -> conv lvl lTele rTele
+    (MVQuote lList, MVQuote rList) -> conv lvl lList rList
+    (MVDyn lTele, MVDyn rTele) -> conv lvl lTele rTele
+    (MVGuard lMeta lProblem lRecordHOAS, MVGuard rMeta rProblem rRecordHOAS) -> do
+      let metaSize = size lMeta
+      let problemSize = size lProblem
+      metaConv <- conv lvl lMeta rMeta
+      problemConv <- conv (shift metaSize lvl) lProblem rProblem
+      let pushLvls = liftObjEnvN (metaSize + problemSize)
+      lRecord <- doEvalHOAS pushLvls lRecordHOAS
+      rRecord <- doEvalHOAS pushLvls rRecordHOAS
+      recordConv <- conv (shift (metaSize + problemSize) lvl) lRecord rRecord
+      return $ metaConv && problemConv && recordConv
     -- computation
     (MVPi lDom le lHOAS, MVPi rDom re rHOAS) -> do
       domConv <- conv lvl lDom rDom

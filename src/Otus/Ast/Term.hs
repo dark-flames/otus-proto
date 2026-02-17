@@ -74,7 +74,7 @@ data MetaTerm
   | MDyn Telescope
   | MGuard Telescope Problem Record
   | MAbsMeta Term MetaTerm
-  | MExt MetaTerm Problem Record
+  | MExt MetaTerm Int Problem Record
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm
   | MLam OptionalMetaTy MetaTerm

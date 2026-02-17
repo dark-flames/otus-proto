@@ -149,7 +149,7 @@ data MetaSpine
   | MSForce MetaSpine
   | MSBind MetaSpine MetaHOAS MetaHOAS
   | MSAbsMeta Value MetaSpine
-  | MSExt MetaSpine ProblemHOAS RecordHOAS
+  | MSExt MetaSpine Int ProblemHOAS RecordHOAS
   | MSSolve MetaSpine
 
 data MetaValue

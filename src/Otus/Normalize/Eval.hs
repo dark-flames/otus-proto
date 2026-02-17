@@ -158,8 +158,8 @@ evaluateMAbsMeta ty = \case
   MNeutral h spine -> return $ MNeutral h (MSAbsMeta ty spine)
   _ -> throwError AbsOnNonDyn
 
-evaluateMExt :: MetaValue -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
-evaluateMExt prev probHOAS recordHOAS = case prev of
+evaluateMExt :: MetaValue -> Int -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
+evaluateMExt prev lift probHOAS recordHOAS = case prev of
   MVGuard prevMeta prevProb prevRecordHOAS -> do
     prevRecord <- evalHOAS prevRecordHOAS (liftObjEnvN (size prevMeta + size prevProb))
     prob <- evalHOAS probHOAS (pushEnvN prevRecord)
@@ -172,7 +172,7 @@ evaluateMExt prev probHOAS recordHOAS = case prev of
               evalHOAS recordHOAS pushRecordWithProb
           )
     return $ MVGuard prevMeta (prevProb >< prob) (HOAS record)
-  MNeutral h spine -> return $ MNeutral h (MSExt spine probHOAS recordHOAS)
+  MNeutral h spine -> return $ MNeutral h (MSExt spine lift probHOAS recordHOAS)
   _ -> throwError AbsOnNonDyn
 
 constrantAsRefl :: VConstraint -> Value
@@ -228,9 +228,9 @@ instance Evaluatable MetaTerm where
       vTy <- evaluate ty env
       val <- evaluate t (liftObjEnv env)
       evaluateMAbsMeta vTy val
-    MExt prev prob record -> do
+    MExt prev lift prob record -> do
       vPrev <- evaluate prev env
-      evaluateMExt vPrev (makeCls prob env) (makeCls record env)
+      evaluateMExt vPrev lift (makeCls prob env) (makeCls record env)
     -- Computation
     MPi dom eff cod -> do
       vDom <- evaluate dom env
