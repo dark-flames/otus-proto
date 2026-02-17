@@ -28,7 +28,6 @@ data WfTerm = WfTerm
   { jTm :: Term,
     jTy :: Type
   }
-  deriving (Eq, Show)
 
 class Judgement j where
   type Tm j

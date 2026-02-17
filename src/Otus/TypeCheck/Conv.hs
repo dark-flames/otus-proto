@@ -10,18 +10,31 @@ import Otus.TypeCheck.Error
 class ConvCheck val where
   conv :: LevelId -> val -> val -> TypeCheckResult Bool
 
+instance ConvCheck VTeleSequence where
+  conv lvl lhs rhs = go lvl (unVTele lhs) (unVTele rhs)
+    where
+      go _ Empty Empty = return True
+      go l (lh :<| lRst) (rh :<| rRst) = do
+        hConv <- conv l lh rh
+        if hConv then do
+          go (incrLvl l) lRst rRst
+        else
+          return False
+      go _ _ _ = return False
+
 instance ConvCheck VTelescope where
-  conv _ VTNil VTNil = return True
-  conv lvl (VTCons lh lCls) (VTCons rh rCls) = do
-    hConv <- conv lvl lh rh
-    if hConv then do
-      let p = vvar lvl
-      lRst <- doEvalClosure p lCls
-      rRst <- doEvalClosure p rCls
-      conv (incrLvl lvl) lRst rRst
-    else
-      return False
-  conv _ _ _ = return False
+  conv lvl lhs rhs = case (lhs, rhs) of
+    (VTNil, VTNil) -> return True
+    (VTCons lh lRstHOAS, VTCons rh rRstHOAS) -> do
+      hConv <- conv lvl lh rh
+      if hConv then do
+        let pushLvl = pushEnv (vvar lvl)
+        lRst <- doEvalHOAS pushLvl lRstHOAS
+        rRst <- doEvalHOAS pushLvl rRstHOAS
+        conv (incrLvl lvl) lRst rRst
+      else
+        return False
+    _ -> return False
 
 instance ConvCheck VRecord where
   conv _ Empty Empty = return True
@@ -56,10 +69,10 @@ instance ConvCheck MetaSpine where
       else
         return False
     (MSForce lh, MSForce rh) -> conv lvl lh rh
-    (MSBind lh lCls _, MSBind rh rCls _) -> do
+    (MSBind lh lHOAS _, MSBind rh rHOAS _) -> do
       let p = mvvar lvl
-      lbind <- doEvalClosure p lCls
-      rbind <- doEvalClosure p rCls
+      lbind <- doEvalHOAS (pushEnv p) lHOAS
+      rbind <- doEvalHOAS (pushEnv p) rHOAS
       bindConv <- conv (incrLvl lvl) lbind rbind
       if bindConv then
         conv lvl lh rh
@@ -73,11 +86,12 @@ instance ConvCheck Value where
       (NVar l, NVar r) -> if l == r then conv lvl ls rs else return False
       (NSplicing l, NSplicing r) -> if l == r then conv lvl ls rs else return False
       _ -> return False
-    (VPi lDom lCls, VPi rDom rCls) -> do
+    (VPi lDom lHOAS, VPi rDom rHOAS) -> do
       domConv <- conv lvl lDom rDom
       if domConv then do
-        lCod <- doEvalClosure (vvar lvl) lCls
-        rCod <- doEvalClosure (vvar lvl) rCls
+        let pushLvl = pushEnv (vvar lvl)
+        lCod <- doEvalHOAS pushLvl lHOAS
+        rCod <- doEvalHOAS pushLvl rHOAS
         conv (incrLvl lvl) lCod rCod
       else
         return False
@@ -105,12 +119,13 @@ instance ConvCheck MetaValue where
     (MVThunk lc, MVThunk rc) -> conv lvl lc rc
     (MVVType l, MVVType l') -> return $ l <= l'
     -- computation
-    (MVPi lDom le lCls, MVPi rDom re rCls) -> do
+    (MVPi lDom le lHOAS, MVPi rDom re rHOAS) -> do
       domConv <- conv lvl lDom rDom
       let eConv = le `lte` re == Just True
       if domConv && eConv then do
-        lCod <- doEvalClosure (mvvar lvl) lCls
-        rCod <- doEvalClosure (mvvar lvl) rCls
+        let pushLvl = pushEnv (mvvar lvl)
+        lCod <- doEvalHOAS pushLvl lHOAS
+        rCod <- doEvalHOAS pushLvl rHOAS
         conv (incrLvl lvl) lCod rCod
       else
         return False

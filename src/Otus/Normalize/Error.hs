@@ -16,5 +16,7 @@ data EvalError
   | SplicingNonMeta
   | BindOnNonComputation
   | ForceOnNonValue
+  | AbsOnNonDyn
+  | ExtOnNonDyn
   | SolveOnNonDyn
   deriving (Eq, Show)

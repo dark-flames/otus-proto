@@ -8,33 +8,63 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Error
-import Otus.Normalize.Eval
 import Otus.Normalize.Value
 
-class (Show v) => Quotable v where
+class Quotable v where
   type QuoteRes v
   quote :: LevelId -> v -> EvalResult (QuoteRes v)
 
 -- Object Language ReadBack
-instance Quotable ObjClosure where
-  type QuoteRes ObjClosure = Term
-  quote lvl cls = do
-    b <- evaluateClosure (vvar lvl) cls
-    quote (incrLvl lvl) b
+
+instance Quotable ObjHOAS where
+  type QuoteRes ObjHOAS = Term
+  quote lvl hoas = do
+    val <- evalHOAS hoas liftObjEnv
+    quote (incrLvl lvl) val
 
 instance Quotable VTelescope where
   type QuoteRes VTelescope = Telescope
-  quote _ VTNil = return $ TeleSeq Empty
-  quote lvl (VTCons ty cls) = do
-    tyTm <- quote lvl ty
-    rst <- evaluateClosure (vvar lvl) cls
-    rTm <- quote (incrLvl lvl) rst
-    return $ TeleSeq (tyTm :<| unTele rTm)
+
+  quote lvl t = TeleSeq <$> go lvl t
+    where
+      go l = \case
+        VTNil -> return Empty
+        VTCons ty rstHOAS -> do
+          tyTm <- quote l ty
+          rst <- evalHOAS rstHOAS liftObjEnv
+          rstTm <- go (incrLvl l) rst
+          return $ tyTm :<| rstTm
+
+instance Quotable VTeleSequence where
+  type QuoteRes VTeleSequence = Telescope
+
+  quote lvl t = TeleSeq <$> go lvl (unVTele t)
+    where
+      go l = \case
+        Empty -> return Empty
+        ty :<| rst -> do
+          tyTm <- quote l ty
+          rstTm <- go (incrLvl l) rst
+          return $ tyTm :<| rstTm
 
 instance Quotable VRecord where
   type QuoteRes VRecord = Record
 
   quote lvl r = RecordSeq <$> mapM (quote lvl) r
+
+instance Quotable VConstraint where
+  type QuoteRes VConstraint = Constraint
+
+  quote lvl = \case
+    VTmEq s lhs rhs ty -> do
+      lhsTm <- quote (shift s lvl) lhs
+      rhsTm <- quote (shift s lvl) rhs
+      tyTm <- quote (shift s lvl) ty
+      return $ TmEq s lhsTm rhsTm tyTm
+
+instance Quotable VProblem where
+  type QuoteRes VProblem = Problem
+  quote lvl = mapM (quote lvl)
 
 quoteSpine :: LevelId -> Term -> Spine -> EvalResult Term
 quoteSpine lvl stuck = \case
@@ -59,11 +89,11 @@ instance Quotable Value where
         NVar l -> return $ Var $ toIndex lvl l
         NSplicing l -> return $ Splicing $ MVar (toIndex lvl l)
       quoteSpine lvl h spine
-    VPi dom cls -> do
+    VPi dom codHOAS -> do
       domTm <- quote lvl dom
-      codTm <- quote lvl cls
+      codTm <- quote lvl codHOAS
       return $ Pi domTm codTm
-    VLam cls -> Lam Nothing <$> quote lvl cls
+    VLam bodyHOAS -> Lam Nothing <$> quote lvl bodyHOAS
     VRecord tele -> Record <$> quote lvl tele
     VList list -> List <$> quote lvl list
     VId ty lhs rhs -> do
@@ -75,11 +105,11 @@ instance Quotable Value where
     VType l -> return $ Type l
 
 -- Meta Language Readback
-instance Quotable MetaClosure where
-  type QuoteRes MetaClosure = MetaTerm
-  quote lvl cls = do
-    b <- evaluateClosure (mvvar lvl) cls
-    quote (incrLvl lvl) b
+instance Quotable MetaHOAS where
+  type QuoteRes MetaHOAS = MetaTerm
+  quote lvl hoas = do
+    val <- evalHOAS hoas liftMetaEnv
+    quote (incrLvl lvl) val
 
 quoteMSpine :: LevelId -> MetaTerm -> MetaSpine -> EvalResult MetaTerm
 quoteMSpine lvl stuck = \case
@@ -89,10 +119,10 @@ quoteMSpine lvl stuck = \case
     pTm <- quote lvl p
     return $ MApp sTm pTm
   MSForce s -> MForce <$> quoteMSpine lvl stuck s
-  MSBind prev bCls tyCls -> do
+  MSBind prev bHOAS tyHOAS -> do
     prevTm <- quoteMSpine lvl stuck prev
-    bTm <- quote lvl bCls
-    bindTyTm <- quote lvl tyCls
+    bTm <- quote lvl bHOAS
+    bindTyTm <- quote lvl tyHOAS
     return $ MLetIn prevTm bTm bindTyTm
   _ -> throwError $ Anyhow "unimplement"
 
@@ -100,11 +130,11 @@ instance Quotable MetaValue where
   type QuoteRes MetaValue = MetaTerm
   quote lvl = \case
     MNeutral h s -> quoteMSpine lvl (MVar $ toIndex lvl h) s
-    MVPi dom e cls -> do
+    MVPi dom e codHOAS -> do
       domTm <- quote lvl dom
-      codTm <- quote lvl cls
+      codTm <- quote lvl codHOAS
       return $ MPi domTm e codTm
-    MVLam cls -> MLam Nothing <$> quote lvl cls
+    MVLam bodyHOAS -> MLam Nothing <$> quote lvl bodyHOAS
     MVF vty -> MF <$> quote lvl vty
     MVReturn v -> MReturn <$> quote lvl v
     MVTrigger e -> return $ MTrigger e

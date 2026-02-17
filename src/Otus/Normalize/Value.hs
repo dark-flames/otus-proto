@@ -3,15 +3,21 @@ module Otus.Normalize.Value (
   Domain (..),
   EnvVal (..),
   Environment (..),
-  objLiftEnv,
+  liftObjEnv,
+  liftObjEnvN,
+  liftMetaEnv,
+  liftMetaEnvN,
   envLevel,
-  Closure (..),
-  ObjClosure,
-  MetaClosure,
-  TeleClosure,
+  splitEnv,
+  HOAS (..),
+  MetaHOAS,
+  ObjHOAS,
+  TeleHOAS,
+  RecordHOAS,
+  ProblemHOAS,
   VTelescope (..),
+  VTeleSequence (..),
   VRecord,
-  VSequence (..),
   VConstraint (..),
   VProblem,
   Spine (..),
@@ -22,30 +28,47 @@ module Otus.Normalize.Value (
   vvar,
   mvvar,
   emptyEnv,
+  varSeq,
 ) where
+
+import Data.Sequence as Seq
 
 import Otus.Ast
 import Otus.Common
+import Otus.Normalize.Error
 
 -- Environment
 data EnvItem
   = MetaVal MetaValue
   | ObjVal Value
-  deriving (Eq, Show)
 
 newtype Environment = Env
   { unEnv :: Seq EnvItem
   }
-  deriving (Eq, Show)
 
 envLevel :: Environment -> LevelId
 envLevel = LevelId . size
 
-objLiftEnv :: Int -> Environment -> Environment
-objLiftEnv n env = env ||><| fmap f (fromList [s .. s + n])
+liftObjEnv :: Environment -> Environment
+liftObjEnv = liftObjEnvN 1
+
+liftObjEnvN :: Int -> Environment -> Environment
+liftObjEnvN n env = env ||><| fmap f (fromList [s .. s + n])
   where
     s = size env
     f = vvar . LevelId
+
+liftMetaEnv :: Environment -> Environment
+liftMetaEnv = liftMetaEnvN 1
+
+liftMetaEnvN :: Int -> Environment -> Environment
+liftMetaEnvN n env = env ||><| fmap f (fromList [s .. s + n])
+  where
+    s = size env
+    f = mvvar . LevelId
+
+splitEnv :: Int -> Environment -> (Environment, Seq EnvItem)
+splitEnv n (Env env) = (Env (Seq.take (size env - n) env), Seq.drop (size env - n) env)
 
 class EnvVal v where
   intoItem :: v -> EnvItem
@@ -56,44 +79,47 @@ class EnvVal v where
   (||><|) :: Environment -> Seq v -> Environment
   e ||><| s = Env (unEnv e >< fmap intoItem s)
 
-class (EnvVal v, Eq v, Show v) => Domain v where
+  pushEnv :: v -> Environment -> Environment
+  pushEnv val e = e ||> val
+
+  pushEnvN :: Seq v -> Environment -> Environment
+  pushEnvN s e = e ||><| s
+
+class (EnvVal v) => Domain v where
   type Syntax v
 
   domVar :: LevelId -> v
 
 -- Closure
-data Closure tm = Closure
-  { clsEnv :: Environment,
-    clsTm :: tm
+newtype HOAS val = HOAS
+  { evalHOAS :: (Environment -> Environment) -> Result EvalError val
   }
-  deriving (Eq, Show)
 
-type ObjClosure = Closure Term
-
-type MetaClosure = Closure MetaTerm
+type MetaHOAS = HOAS MetaValue
 
 -- Object
-type TeleClosure = Closure Telescope
+type RecordHOAS = HOAS VRecord
 
-type SeqClosure = Closure Sequence
+type ObjHOAS = HOAS Value
+
+type TeleHOAS = HOAS VTelescope
+
+type ProblemHOAS = HOAS VProblem
 
 data VTelescope
   = VTNil
-  | VTCons Value TeleClosure
-  deriving (Eq, Show)
+  | VTCons Value TeleHOAS
+
+newtype VTeleSequence = VTeleSeq
+  { unVTele :: Seq Value
+  }
 
 type VRecord = Seq Value
-
-data VSequence
-  = VSeqNil
-  | VSeqCons Value SeqClosure
-  deriving (Eq, Show)
 
 type VProblem = Seq VConstraint
 
 data VConstraint
-  = VTmEq Int Value Value
-  deriving (Eq, Show)
+  = VTmEq Int Value Value Value
 
 data Spine
   = SNil
@@ -101,39 +127,36 @@ data Spine
   | SFirst Spine
   | SRest Spine
   | SJ Value Value Spine
-  deriving (Eq, Show)
 
 data Stuck
   = NVar LevelId
   | NSplicing LevelId
-  deriving (Eq, Show)
 
 data Value
   = Neutral Stuck Spine
-  | VPi Value ObjClosure
-  | VLam ObjClosure
+  | VPi Value ObjHOAS
+  | VLam ObjHOAS
   | VRecord VTelescope
   | VList VRecord
   | VId Value Value Value
   | VRefl
   | VType Int
-  deriving (Eq, Show)
 
 -- Meta
 data MetaSpine
   = MSNil
   | MSApp MetaSpine MetaValue
   | MSForce MetaSpine
-  | MSBind MetaSpine MetaClosure MetaClosure
-  | MSExt MetaSpine VProblem Environment Sequence
-  | MSSolveWith MetaSpine VProblem (Seq (Int, SeqClosure))
-  deriving (Eq, Show)
+  | MSBind MetaSpine MetaHOAS MetaHOAS
+  | MSAbsMeta Value MetaSpine
+  | MSExt MetaSpine ProblemHOAS RecordHOAS
+  | MSSolve MetaSpine
 
 data MetaValue
   = MNeutral LevelId MetaSpine
   | -- Comptation
-    MVPi MetaValue EffectSet MetaClosure
-  | MVLam MetaClosure
+    MVPi MetaValue EffectSet MetaHOAS
+  | MVLam MetaHOAS
   | MVF MetaValue
   | MVReturn MetaValue
   | MVTrigger Effect
@@ -144,10 +167,8 @@ data MetaValue
   | MVVType Int
   | MVLift VTelescope
   | MVQuote VRecord
-  | MVDyn VTelescope TeleClosure
-  | MVNil Int
-  | MVExt MetaValue Int VProblem Environment Sequence
-  deriving (Eq, Show)
+  | MVDyn VTelescope
+  | MVGuard VTeleSequence VProblem RecordHOAS
 
 instance Sized Environment where
   size = size . unEnv
@@ -155,6 +176,9 @@ instance Sized Environment where
 instance Indexable Environment where
   type Item Environment = EnvItem
   (@?) e i = unEnv e @? i
+
+instance Sized VTeleSequence where
+  size = size . unVTele
 
 instance Domain Value where
   type Syntax Value = Term
@@ -183,3 +207,6 @@ mvvar lvl = MNeutral lvl MSNil
 
 emptyEnv :: Environment
 emptyEnv = Env mempty
+
+varSeq :: (Domain v) => [Int] -> Seq v
+varSeq = fromList . map (domVar . LevelId)

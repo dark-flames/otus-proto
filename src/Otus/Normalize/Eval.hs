@@ -1,5 +1,8 @@
 module Otus.Normalize.Eval (
   evaluateApp,
+  evaluateFirst,
+  evaluateRest,
+  evaluateJ,
   evaluateMApp,
   Evaluatable (..),
 ) where
@@ -14,42 +17,25 @@ import Otus.Normalize.Value
 
 class (Show t) => Evaluatable t where
   type EvalRes t
-  type ClsParam t
 
   evaluate :: t -> Environment -> EvalResult (EvalRes t)
 
-  evaluateClosure
-    :: (EnvVal (ClsParam t))
-    => ClsParam t -> Closure t -> EvalResult (EvalRes t)
-  evaluateClosure param cls = evaluate (clsTm cls) (clsEnv cls ||> param)
-
-  evaluateClosureFresh
-    :: (Domain (ClsParam t))
-    => Closure t -> EvalResult (EvalRes t)
-  evaluateClosureFresh cls = evaluate (clsTm cls) (env ||> p)
-    where
-      env = clsEnv cls
-      p = intoItem (domVar @(ClsParam t) $ envLevel env)
-
-  evaluateClosureN
-    :: (EnvVal (ClsParam t))
-    => Seq (ClsParam t) -> Closure t -> EvalResult (EvalRes t)
-  evaluateClosureN params cls = evaluate (clsTm cls) (clsEnv cls ||><| params)
-
-  evaluateClosureFreshN
-    :: (Domain (ClsParam t))
-    => Int -> Closure t -> EvalResult (EvalRes t)
-  evaluateClosureFreshN n cls = evaluate (clsTm cls) env'
-    where
-      env = clsEnv cls
-      s = size env
-      f = domVar @(ClsParam t) . LevelId
-      env' = env ||><| fmap f (fromList [s .. s + n])
+  makeCls :: t -> Environment -> HOAS (EvalRes t)
+  makeCls t env = HOAS (\f -> evaluate t (f env))
 
 -- object
+intoTeleSequence :: VTelescope -> EvalResult VTeleSequence
+intoTeleSequence t = VTeleSeq <$> go t
+  where
+    go VTNil = return Empty
+    go (VTCons ty rstHOAS) = do
+      rst <- evalHOAS rstHOAS liftObjEnv
+      rstSeq <- go rst
+      return $ ty :<| rstSeq
+
 evaluateApp :: Value -> Value -> EvalResult Value
 evaluateApp vFn vParam = case vFn of
-  VLam cls -> evaluateClosure vParam cls
+  VLam bodyHOAS -> evalHOAS bodyHOAS (pushEnv vParam)
   Neutral h spine -> return $ Neutral h (SApp spine vParam)
   _ -> throwError AppOnNonLambda
 
@@ -81,45 +67,36 @@ evaluateSplicing = \case
 
 instance Evaluatable Telescope where
   type EvalRes Telescope = VTelescope
-  type ClsParam Telescope = Value
+
   evaluate tele env = case unTele tele of
     Empty -> return VTNil
     ty :<| rest -> do
       vTy <- evaluate ty env
-      return $ VTCons vTy (Closure env (TeleSeq rest))
+      return $ VTCons vTy (makeCls (TeleSeq rest) env)
 
 instance Evaluatable Record where
   type EvalRes Record = VRecord
-  type ClsParam Record = Value
-  evaluate record env = mapM (`evaluate` env) (unRecord record)
 
-instance Evaluatable Sequence where
-  type EvalRes Sequence = VSequence
-  type ClsParam Sequence = Value
-  evaluate s env = case unSeq s of
-    Empty -> return VSeqNil
-    ty :<| rest -> do
-      vTy <- evaluate ty env
-      return $ VSeqCons vTy (Closure env (Sequence rest))
+  evaluate record env = mapM (`evaluate` env) (unRecord record)
 
 instance Evaluatable Constraint where
   type EvalRes Constraint = VConstraint
-  type ClsParam Constraint = Value
-  evaluate (TmEq lift lhs rhs) env = do
-    let env' = objLiftEnv lift env
+
+  evaluate (TmEq lift lhs rhs eqTy) env = do
+    let env' = liftObjEnvN lift env
+    vEqTy <- evaluate eqTy env'
     vLhs <- evaluate lhs env'
     vRhs <- evaluate rhs env'
-    return $ VTmEq lift vLhs vRhs
+    return $ VTmEq lift vLhs vRhs vEqTy
 
 instance Evaluatable Problem where
   type EvalRes Problem = VProblem
-  type ClsParam Problem = Value
 
   evaluate prob env = mapM (`evaluate` env) prob
 
 instance Evaluatable Term where
   type EvalRes Term = Value
-  type ClsParam Term = Value
+
   evaluate tm env = case tm of
     Var idx -> case env @? idx of
       Nothing -> throwError $ UnboundIndex idx
@@ -128,9 +105,8 @@ instance Evaluatable Term where
     TyAnnotation t _ -> evaluate t env
     Pi dom cod -> do
       vDom <- evaluate dom env
-      let cls = Closure env cod
-      return $ VPi vDom cls
-    Lam _ body -> return $ VLam (Closure env body)
+      return $ VPi vDom (makeCls cod env)
+    Lam _ body -> return $ VLam (makeCls body env)
     App fn param -> do
       vFn <- evaluate fn env
       vParam <- evaluate param env
@@ -146,7 +122,7 @@ instance Evaluatable Term where
       return $ VId vTy vL vR
     Refl -> return VRefl
     J fam p e -> do
-      vFam <- evaluate fam (objLiftEnv 2 env)
+      vFam <- evaluate fam (liftObjEnvN 2 env)
       vP <- evaluate p env
       vE <- evaluate e env
       evaluateJ vFam vP vE
@@ -156,7 +132,6 @@ instance Evaluatable Term where
     Type l -> return $ VType l
 
 -- meta
-
 evaluateMForce :: MetaValue -> EvalResult MetaValue
 evaluateMForce = \case
   MVThunk c -> return c
@@ -165,30 +140,69 @@ evaluateMForce = \case
 
 evaluateMApp :: MetaValue -> MetaValue -> EvalResult MetaValue
 evaluateMApp vFn vParam = case vFn of
-  MVLam cls -> evaluateClosure vParam cls
+  MVLam bodyHOAS -> evalHOAS bodyHOAS (pushEnv vParam)
   MVTrigger e -> return $ MVTrigger e
   MNeutral h spine -> return $ MNeutral h (MSApp spine vParam)
   _ -> throwError AppOnNonLambda
 
-evaluateMBind :: MetaValue -> MetaClosure -> MetaClosure -> EvalResult MetaValue
-evaluateMBind prev curCls tyCls = case prev of
+evaluateMBind :: MetaValue -> MetaHOAS -> MetaHOAS -> EvalResult MetaValue
+evaluateMBind prev curHOAS tyHOAS = case prev of
   MVTrigger e -> return $ MVTrigger e
-  MVReturn val -> evaluateClosure val curCls
-  MNeutral h spine -> return $ MNeutral h (MSBind spine curCls tyCls)
+  MVReturn val -> evalHOAS curHOAS (pushEnv val)
+  MNeutral h spine -> return $ MNeutral h (MSBind spine curHOAS tyHOAS)
   _ -> throwError BindOnNonComputation
 
-evaluateSolve :: MetaValue -> EvalResult MetaValue
-evaluateSolve d = go d mempty mempty
+evaluateMAbsMeta :: Value -> MetaValue -> EvalResult MetaValue
+evaluateMAbsMeta ty = \case
+  MVGuard tele problem record -> return $ MVGuard (VTeleSeq (ty :<| unVTele tele)) problem record
+  MNeutral h spine -> return $ MNeutral h (MSAbsMeta ty spine)
+  _ -> throwError AbsOnNonDyn
+
+evaluateMExt :: MetaValue -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
+evaluateMExt prev probHOAS recordHOAS = case prev of
+  MVGuard prevMeta prevProb prevRecordHOAS -> do
+    prevRecord <- evalHOAS prevRecordHOAS (liftObjEnvN (size prevMeta + size prevProb))
+    prob <- evalHOAS probHOAS (pushEnvN prevRecord)
+    let record f =
+          ( do
+              -- get the value of prevMeta and prevProb, and then evaluate prevRecord
+              pr <- evalHOAS prevRecordHOAS (fst . splitEnv (size prob) . f)
+              -- push prevRecord and prob
+              let pushRecordWithProb e = e ||><| pr ||><| snd (splitEnv (size prob) (f e))
+              evalHOAS recordHOAS pushRecordWithProb
+          )
+    return $ MVGuard prevMeta (prevProb >< prob) (HOAS record)
+  MNeutral h spine -> return $ MNeutral h (MSExt spine probHOAS recordHOAS)
+  _ -> throwError AbsOnNonDyn
+
+constrantAsRefl :: VConstraint -> Value
+constrantAsRefl (VTmEq l _ _ _) =
+  if l == 0 then
+    VRefl
+  else
+    VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
   where
-    go v p segs = case v of
-      MVNil _lift -> undefined -- todo: solve lift p >>= fold segs
-      MVExt prev _ p' env s -> go prev (p' >< p) ((size p', Closure env s) <| segs)
-      MNeutral h spine -> return $ MNeutral h (MSSolveWith spine p segs)
-      _ -> throwError SolveOnNonDyn
+    lamN :: Int -> Term -> Term
+    lamN 0 = id
+    lamN x = Lam Nothing . lamN (x - 1)
+
+evaluateSolve :: MetaValue -> EvalResult MetaValue
+evaluateSolve = \case
+  MVGuard _meta prob recordHOAS -> do
+    solved <- undefined
+    let metaRes = singleton $ vvar 0 -- todo: unimplement
+    let probRes = fmap constrantAsRefl prob
+    if solved then do
+      record <- evalHOAS recordHOAS (pushEnvN probRes . pushEnvN metaRes)
+      return $ MVQuote record
+    else
+      return $ MVTrigger Unification
+  MNeutral h spine -> return $ MNeutral h (MSSolve spine)
+  _ -> throwError SolveOnNonDyn
 
 instance Evaluatable MetaTerm where
   type EvalRes MetaTerm = MetaValue
-  type ClsParam MetaTerm = MetaValue
+
   evaluate tm env = case tm of
     -- Value
     MVar idx -> case env @? idx of
@@ -203,20 +217,25 @@ instance Evaluatable MetaTerm where
     MVType lvl -> return $ MVVType lvl
     MLift oty -> MVLift <$> evaluate oty env
     MQuote otm -> MVQuote <$> evaluate otm env
-    MDyn meta tele -> do
-      vMeta <- evaluate meta env
-      return $ MVDyn vMeta (Closure env tele)
-    MNil lift -> return $ MVNil lift
-    MExt prev lift prob s -> do
+    MDyn tele -> do
+      vtele <- evaluate tele env
+      return $ MVDyn vtele
+    MGuard meta prob record -> do
+      vMeta <- evaluate meta env >>= intoTeleSequence
+      vProblem <- evaluate prob (liftObjEnvN (size meta) env)
+      return $ MVGuard vMeta vProblem (makeCls record env)
+    MAbsMeta ty t -> do
+      vTy <- evaluate ty env
+      val <- evaluate t (liftObjEnv env)
+      evaluateMAbsMeta vTy val
+    MExt prev prob record -> do
       vPrev <- evaluate prev env
-      vProb <- evaluate prob (objLiftEnv lift env)
-      return $ MVExt vPrev lift vProb env s
+      evaluateMExt vPrev (makeCls prob env) (makeCls record env)
     -- Computation
     MPi dom eff cod -> do
       vDom <- evaluate dom env
-      let cls = Closure env cod
-      return $ MVPi vDom eff cls
-    MLam _ body -> return $ MVLam (Closure env body)
+      return $ MVPi vDom eff (makeCls cod env)
+    MLam _ body -> return $ MVLam (makeCls body env)
     MApp f p -> do
       vP <- evaluate p env
       cF <- evaluate f env
@@ -229,7 +248,7 @@ instance Evaluatable MetaTerm where
     MCType lvl -> return $ MVCType lvl
     MLetIn prev cur bindTy -> do
       cPrev <- evaluate prev env
-      evaluateMBind cPrev (Closure env cur) (Closure env bindTy)
+      evaluateMBind cPrev (makeCls cur env) (makeCls bindTy env)
     MForce t -> do
       val <- evaluate t env
       evaluateMForce val

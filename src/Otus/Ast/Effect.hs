@@ -1,5 +1,5 @@
 module Otus.Ast.Effect (
-  Effect,
+  Effect (..),
   EffectSet,
   PartialOrder (..),
   JoinSemilattice (..),

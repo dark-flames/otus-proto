@@ -51,12 +51,12 @@ checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
     go ctx preRecord tele = case (preRecord, tele) of
       -- Γ |- [] : Record Nil
       (Empty, VTNil) -> return Empty
-      (preTm :<| restPR, VTCons ty cls) -> do
+      (preTm :<| restPR, VTCons ty rstHOST) -> do
         -- Γ |- a : A
         t <- check ctx preTm ty
         v <- doEval ctx (tmOf t)
         -- Γ |- Δ[a] tele
-        restTele <- doEvalClosure v cls
+        restTele <- doEvalHOAS (pushEnv v) rstHOST
         -- Γ |- rest <: Record Δ[a]
         restR <- go (ctx |:> ty) restPR restTele
         -- Γ |- [a, ..rest] <: Record A, Δ
@@ -103,17 +103,17 @@ instance TypeCheck Term where
       return $
         WfTerm
           { jTm = Lam (Just $ tmOf tyTm) (tmOf bodyTm),
-            jTy = VPi ty (Closure (ctxEnv ctx) codTyTm)
+            jTy = VPi ty (makeCls codTyTm (ctxEnv ctx))
           }
     App f p -> do
       fTm <- infer ctx f
       case tyOf fTm of
-        VPi dom cls -> do
+        VPi dom codHOAS -> do
           -- Γ |- p : A
           pTm <- check ctx p dom
           vP <- doEval ctx (tmOf pTm)
           -- Γ |- B[id, p] type
-          res <- doEvalClosure vP cls
+          res <- doEvalHOAS (pushEnv vP) codHOAS
           -- Γ |- f p : B[id, p]
           return $
             WfTerm
@@ -145,9 +145,9 @@ instance TypeCheck Term where
     Rest preTm -> do
       t <- infer ctx preTm
       case tyOf t of
-        VRecord (VTCons _ cls) -> do
+        VRecord (VTCons _ rstHOAS) -> do
           val <- doEval ctx (First preTm)
-          restTele <- doEvalClosure val cls
+          restTele <- doEvalHOAS (pushEnv val) rstHOAS
           return $
             WfTerm
               { jTm = Rest (tmOf t),
@@ -203,7 +203,7 @@ instance TypeCheck Term where
     preTm -> throwError $ CannotInferTerm preTm
 
   check ctx preTm ty = case (preTm, ty) of
-    (Lam oty body, VPi dom cls) -> do
+    (Lam oty body, VPi dom codHOAS) -> do
       domTy <- case oty of
         Nothing -> return dom
         Just prePTy -> do
@@ -215,12 +215,12 @@ instance TypeCheck Term where
             domTm <- doQuote ctx dom
             throwError $ Unify preTm prePTy domTm
 
-      cod <- doEvalClosureFresh cls
+      cod <- doEvalHOAS liftObjEnv codHOAS
       bodyTm <- check (ctx |:> domTy) body cod
       return $
         WfTerm
           { jTm = Lam oty $ tmOf bodyTm,
-            jTy = VPi dom cls
+            jTy = VPi dom codHOAS
           }
     (List preRecord, VRecord tele) -> do
       record <- checkRecord ctx preRecord tele
@@ -315,19 +315,19 @@ instance TypeCheck MetaTerm where
         WfMetaTerm
           { jTm = MLam (Just $ tmOf tyTm) (tmOf bodyTm),
             jEff = mempty,
-            jTy = MVPi ty (effOf bodyTm) (Closure (ctxEnv ctx) codTyTm)
+            jTy = MVPi ty (effOf bodyTm) (makeCls codTyTm (ctxEnv ctx))
           }
     MApp f p -> do
       -- Γ |- f :> e ! Pi A e' B
       fTm <- infer ctx f
       let e = effOf fTm
       case tyOf fTm of
-        MVPi dom e' cls -> do
+        MVPi dom e' codHOAS -> do
           -- Γ |- p<: A
           pTm <- check ctx p dom
           vP <- doEval ctx (tmOf pTm)
           -- Γ |- B[id, p] ctype
-          res <- doEvalClosure vP cls
+          res <- doEvalHOAS (pushEnv vP) codHOAS
           -- Γ |- f p :> e \/ e' ! B[id, p]
           return $
             WfMetaTerm
@@ -424,7 +424,7 @@ instance TypeCheck MetaTerm where
       else
         throwError $ ComputationEffErr c (effOf cTm) e
     ---- Computation
-    (MLam oty body, MVPi dom eff cls) -> do
+    (MLam oty body, MVPi dom eff codHOAS) -> do
       domTy <- case oty of
         Nothing -> return dom
         Just prePTy -> do
@@ -436,13 +436,13 @@ instance TypeCheck MetaTerm where
             domTm <- doQuote ctx dom
             throwError $ ComputationUnify preTm prePTy domTm
 
-      cod <- doEvalClosureFresh cls
+      cod <- doEvalHOAS (pushEnv $ mvvar $ ctxLvl ctx) codHOAS
       bodyTm <- check (ctx |:> domTy) body cod
       return $
         WfMetaTerm
           { jTm = MLam oty $ tmOf bodyTm,
             jEff = mempty,
-            jTy = MVPi dom (eff \/ effOf bodyTm) cls
+            jTy = MVPi dom (eff \/ effOf bodyTm) codHOAS
           }
     (MReturn v, MVF vty) -> do
       vTm <- check ctx v vty

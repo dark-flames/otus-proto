@@ -13,13 +13,11 @@ import Otus.Normalize
 data ContextSeg
   = MetaTy MetaValue
   | ObjTy Value
-  deriving (Eq, Show)
 
 data Context = Context
   { tys :: Seq ContextSeg,
     ctxEnv :: Environment
   }
-  deriving (Eq, Show)
 
 class ContextTy t where
   intoSeg :: t -> (ContextSeg, Environment -> Environment)

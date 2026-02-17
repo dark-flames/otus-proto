@@ -3,8 +3,7 @@ module Otus.TypeCheck.Error (
   TypeCheckResult,
   doEval,
   doEval',
-  doEvalClosure,
-  doEvalClosureFresh,
+  doEvalHOAS,
   doEvalApp,
   doEvalMApp,
   doQuote,
@@ -18,7 +17,8 @@ import Otus.TypeCheck.Context
 
 data TypeError
   = EvalError EvalError String
-  | ReadbackError EvalError String
+  | HOASEvalError EvalError
+  | ReadbackError EvalError
   | AppEvalError EvalError String String
   | CannotInferIndex
   | CannotInferObjAsMeta
@@ -64,19 +64,10 @@ doEval' ctx p tm =
     Success v -> return v
     Failure e -> Failure $ EvalError e (show tm)
 
-doEvalClosure
-  :: (EnvVal (ClsParam tm), Evaluatable tm)
-  => ClsParam tm -> Closure tm -> TypeCheckResult (EvalRes tm)
-doEvalClosure val cls = case evaluateClosure val cls of
+doEvalHOAS :: (Environment -> Environment) -> HOAS v -> TypeCheckResult v
+doEvalHOAS f hoas = case evalHOAS hoas f of
   Success v -> return v
-  Failure e -> Failure $ EvalError e (show (clsTm cls))
-
-doEvalClosureFresh
-  :: (Domain (ClsParam tm), Evaluatable tm)
-  => Closure tm -> TypeCheckResult (EvalRes tm)
-doEvalClosureFresh cls = case evaluateClosureFresh cls of
-  Success v -> return v
-  Failure e -> Failure $ EvalError e (show (clsTm cls))
+  Failure e -> Failure $ HOASEvalError e
 
 doQuote :: (Quotable v) => Context -> v -> TypeCheckResult (QuoteRes v)
 doQuote ctx = doQuote' (ctxLvl ctx)
@@ -84,7 +75,7 @@ doQuote ctx = doQuote' (ctxLvl ctx)
 doQuote' :: (Quotable v) => LevelId -> v -> TypeCheckResult (QuoteRes v)
 doQuote' lvl v = case quote lvl v of
   Success t -> return t
-  Failure e -> Failure $ ReadbackError e (show v)
+  Failure e -> Failure $ ReadbackError e
 
 doEvalApp :: LevelId -> Value -> Value -> TypeCheckResult Value
 doEvalApp lvl f p = case evaluateApp f p of

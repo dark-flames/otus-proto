@@ -31,7 +31,7 @@ newtype Sequence = Sequence
 type Problem = Seq Constraint
 
 data Constraint
-  = TmEq Int Term Term
+  = TmEq Int Term Term Term
   deriving (Eq, Show)
 
 type OptionalTy = Maybe Term
@@ -71,9 +71,10 @@ data MetaTerm
   | ---- Embedding
     MLift Telescope
   | MQuote Record
-  | MDyn Telescope Telescope
-  | MNil Int
-  | MExt MetaTerm Int Problem Sequence
+  | MDyn Telescope
+  | MGuard Telescope Problem Record
+  | MAbsMeta Term MetaTerm
+  | MExt MetaTerm Problem Record
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm
   | MLam OptionalMetaTy MetaTerm
@@ -86,6 +87,12 @@ data MetaTerm
   | MCType Int
   | MSolve MetaTerm
   deriving (Eq)
+
+instance Sized Telescope where
+  size = size . unTele
+
+instance Sized Record where
+  size = size . unRecord
 
 instance Pretty Telescope where
   pretty = pretty . unTele
