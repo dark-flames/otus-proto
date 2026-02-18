@@ -47,9 +47,10 @@ instance ConvCheck VRecord where
   conv _ _ _ = return False
 
 instance ConvCheck VConstraint where
-  conv lvl (VTmEq lLift lLhs lRhs lTy) (VTmEq rLift rLhs rRhs rTy) =
-    if lLift == rLift then do
-      let l = shift lLift lvl
+  conv lvl (VTmEq lTele lLhs lRhs lTy) (VTmEq rTele rLhs rRhs rTy) = do
+    teleConv <- conv lvl lTele rTele
+    if teleConv then do
+      let l = shift (size lTele) lvl
       tyConv <- conv l lTy rTy
       if tyConv then do
         lhsConv <- conv l lLhs rLhs

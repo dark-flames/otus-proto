@@ -3,11 +3,13 @@ module Otus.TypeCheck.Error (
   TypeCheckResult,
   doEval,
   doEval',
+  doEvalVTeleSeq,
   doEvalHOAS,
   doEvalApp,
   doEvalMApp,
   doQuote,
   doQuote',
+  doIntoTeleSequence,
 ) where
 
 import Otus.Ast
@@ -41,8 +43,10 @@ data TypeError
   | ExpectedToBeMetaTy MetaTerm
   | ExpectedToBeFn Term Term
   | ExpectedToBeMetaFn MetaTerm MetaTerm
+  | ExpectedToBeDyn MetaTerm MetaTerm
   | ExpectedToBeNonEmptyRecord Term Term
   | ExpectedToBeIdeneity Term Term
+  | UnexpectedLift MetaTerm Int
   | AnyhowTyErr String
   deriving (Show)
 
@@ -63,6 +67,16 @@ doEval' ctx p tm =
   case evaluate tm (ctxEnv ctx ||><| fromList p) of
     Success v -> return v
     Failure e -> Failure $ EvalError e (show tm)
+
+doEvalVTeleSeq :: Context -> Telescope -> TypeCheckResult VTeleSequence
+doEvalVTeleSeq ctx tele = case evaluate tele (ctxEnv ctx) >>= intoTeleSequence of
+  Success v -> return v
+  Failure e -> Failure $ EvalError e (show tele)
+
+doIntoTeleSequence :: VTelescope -> TypeCheckResult VTeleSequence
+doIntoTeleSequence tele = case intoTeleSequence tele of
+  Success v -> return v
+  Failure e -> Failure $ EvalError e "intoTeleSeq"
 
 doEvalHOAS :: (Environment -> Environment) -> HOAS v -> TypeCheckResult v
 doEvalHOAS f hoas = case evalHOAS hoas f of

@@ -119,7 +119,7 @@ type VRecord = Seq Value
 type VProblem = Seq VConstraint
 
 data VConstraint
-  = VTmEq Int Value Value Value
+  = VTmEq VTeleSequence Value Value Value
 
 data Spine
   = SNil

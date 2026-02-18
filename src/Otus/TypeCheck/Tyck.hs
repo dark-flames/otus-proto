@@ -65,6 +65,28 @@ checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
         teleTm <- doQuote ctx tele
         throwError $ CannotCheckRecord (RecordSeq preRecord) teleTm
 
+checkConstraint :: Context -> Constraint -> TypeCheckResult (Constraint, Type)
+checkConstraint ctx (TmEq preTele preLhs preRhs preTy) = do
+  (tele, _) <- inferTelescope ctx preTele
+  vTele <- doEvalVTeleSeq ctx tele
+  let ctx' = pushVTeleSeq vTele ctx
+  (tyTm, ty, _) <- inferTy' ctx' preTy
+  lhs <- tmOf <$> check ctx preLhs ty
+  rhs <- tmOf <$> check ctx preRhs ty
+  let eqTyTm = piTele tele (Id (tmOf tyTm) lhs rhs)
+  eqTy <- doEval ctx eqTyTm
+  return (TmEq tele lhs rhs (tmOf tyTm), eqTy)
+
+checkProblem :: Context -> Problem -> TypeCheckResult (Problem, VTeleSequence)
+checkProblem c p = mapSnd VTeleSeq <$> go c p
+  where
+    go ctx = \case
+      Empty -> return (Empty, Empty)
+      (preConstraint :<| preRst) -> do
+        (constraint, eqTy) <- checkConstraint ctx preConstraint
+        (rst, rstTele) <- go (ctx |:> eqTy) preRst
+        return (constraint :<| rst, eqTy :<| rstTele)
+
 instance TypeCheck Term where
   type Ty Term = Type
   type TmJdg Term = WfTerm
@@ -293,6 +315,27 @@ instance TypeCheck MetaTerm where
       return $ wfMetaValue (MThunk (tmOf cTm)) (MVU (effOf cTm) (tyOf cTm))
     MVType l ->
       return $ wfMetaValue (MVType l) (MVVType (l + 1))
+    MLift tele -> do
+      (teleTm, l) <- inferTelescope ctx tele
+      vTele <- doEval ctx teleTm
+      return $ wfMetaValue (MVType l) (MVLift vTele)
+    MDyn tele -> do
+      (teleTm, l) <- inferTelescope ctx tele
+      vTele <- doEval ctx teleTm
+      return $ wfMetaValue (MVType l) (MVDyn vTele)
+    MAbsMeta preTy preTm -> do
+      (tyTm, ty, _) <- inferTy' ctx preTy
+      let ctx' = ctx |:> ty
+      tm <- infer ctx' preTm
+      case tyOf tm of
+        MVDyn innerTele -> do
+          innerTeleTm <- unTele <$> doQuote ctx' innerTele -- todo: workaround, refactor infer to return tyTm at the same time
+          let teleTm = TeleSeq (tmOf tyTm <| innerTeleTm)
+          tele <- doEval ctx teleTm
+          return $ wfMetaValue (MAbsMeta (tmOf tyTm) (tmOf tm)) (MVDyn tele)
+        innerTy -> do
+          innerTyTm <- doQuote ctx' innerTy
+          throwError $ ExpectedToBeDyn preTm innerTyTm
     ---- Computation
     MPi dom eff cod -> do
       -- Γ |- Dom vtype @ domL
@@ -403,6 +446,19 @@ instance TypeCheck MetaTerm where
         t -> do
           ty <- doQuote ctx t
           throwError $ CannotForce v ty
+    MSolve preTm -> do
+      jdg <- infer ctx preTm
+      case tyOf jdg of
+        MVDyn tele ->
+          return $
+            WfMetaTerm
+              { jTm = MSolve (tmOf jdg),
+                jEff = singletonEff Unification,
+                jTy = MVLift tele
+              }
+        ty -> do
+          tyTm <- doQuote ctx ty
+          throwError $ ExpectedToBeDyn preTm tyTm
     -- Γ |- CTy(l) :> CTy(suc l)
     MCType l ->
       return $
@@ -423,6 +479,33 @@ instance TypeCheck MetaTerm where
         return $ wfMetaValue (MThunk (tmOf cTm)) (MVU e (tyOf cTm))
       else
         throwError $ ComputationEffErr c (effOf cTm) e
+    (MQuote preRecord, MVLift vTele) -> do
+      record <- checkRecord ctx preRecord vTele
+      return $ wfMetaValue (MQuote record) (MVLift vTele)
+    (MGuard preMeta preProblem preRecord, MVDyn vTele) -> do
+      (metaTele, _) <- inferTelescope ctx preMeta
+      vMetaTele <- doEvalVTeleSeq ctx metaTele
+      let problemCtx = pushVTeleSeq vMetaTele ctx
+      (problem, problemTele) <- checkProblem problemCtx preProblem
+      let recordCtx = pushVTeleSeq problemTele problemCtx
+      record <- checkRecord recordCtx preRecord vTele
+      return $ wfMetaValue (MGuard metaTele problem record) (MVDyn vTele)
+    (MExt prePrev lift preProblem preRecord, MVDyn vTele) -> do
+      prev <- infer ctx prePrev
+      case tyOf prev of
+        MVDyn prevTele -> do
+          prevTeleSeq <- doIntoTeleSequence prevTele
+          if lift == size prevTeleSeq then do
+            let problemCtx = pushVTeleSeq prevTeleSeq ctx
+            (problem, problemTeleSeq) <- checkProblem problemCtx preProblem
+            let recordCtx = pushVTeleSeq problemTeleSeq problemCtx
+            record <- checkRecord recordCtx preRecord vTele
+            return $ wfMetaValue (MExt (tmOf prev) lift problem record) (MVDyn vTele)
+          else
+            throwError $ UnexpectedLift (MExt prePrev lift preProblem preRecord) (size prevTeleSeq)
+        prevTy -> do
+          prevTyTm <- doQuote ctx prevTy
+          throwError $ ExpectedToBeDyn prePrev prevTyTm
     ---- Computation
     (MLam oty body, MVPi dom eff codHOAS) -> do
       domTy <- case oty of

@@ -53,11 +53,13 @@ instance Quotable VConstraint where
   type QuoteRes VConstraint = Constraint
 
   quote lvl = \case
-    VTmEq s lhs rhs ty -> do
-      lhsTm <- quote (shift s lvl) lhs
-      rhsTm <- quote (shift s lvl) rhs
-      tyTm <- quote (shift s lvl) ty
-      return $ TmEq s lhsTm rhsTm tyTm
+    VTmEq teleSeq lhs rhs ty -> do
+      tele <- quote lvl teleSeq
+      let eqLvl = shift (size tele) lvl
+      lhsTm <- quote eqLvl lhs
+      rhsTm <- quote eqLvl rhs
+      tyTm <- quote eqLvl ty
+      return $ TmEq tele lhsTm rhsTm tyTm
 
 instance Quotable VProblem where
   type QuoteRes VProblem = Problem

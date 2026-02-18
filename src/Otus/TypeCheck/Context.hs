@@ -4,6 +4,7 @@ module Otus.TypeCheck.Context (
   ContextTy (..),
   ctxLvl,
   emptyCtx,
+  pushVTeleSeq,
 ) where
 
 import Otus.Ast
@@ -49,3 +50,9 @@ ctxLvl = envLevel . ctxEnv
 
 emptyCtx :: Context
 emptyCtx = Context mempty emptyEnv
+
+pushVTeleSeq :: VTeleSequence -> Context -> Context
+pushVTeleSeq s = go (unVTele s)
+  where
+    go Empty ctx = ctx
+    go (h :<| rst) ctx = go rst (ctx |:> h)

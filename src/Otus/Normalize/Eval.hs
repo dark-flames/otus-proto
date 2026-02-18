@@ -4,6 +4,7 @@ module Otus.Normalize.Eval (
   evaluateRest,
   evaluateJ,
   evaluateMApp,
+  intoTeleSequence,
   Evaluatable (..),
 ) where
 
@@ -82,17 +83,23 @@ instance Evaluatable Record where
 instance Evaluatable Constraint where
   type EvalRes Constraint = VConstraint
 
-  evaluate (TmEq lift lhs rhs eqTy) env = do
-    let env' = liftObjEnvN lift env
+  evaluate (TmEq tele lhs rhs eqTy) env = do
+    vTeleSeq <- evaluate tele env >>= intoTeleSequence
+    let env' = liftObjEnvN (size tele) env
     vEqTy <- evaluate eqTy env'
     vLhs <- evaluate lhs env'
     vRhs <- evaluate rhs env'
-    return $ VTmEq lift vLhs vRhs vEqTy
+    return $ VTmEq vTeleSeq vLhs vRhs vEqTy
 
 instance Evaluatable Problem where
   type EvalRes Problem = VProblem
 
-  evaluate prob env = mapM (`evaluate` env) prob
+  evaluate p env = case p of
+    Empty -> return Empty
+    c :<| prob -> do
+      vC <- evaluate c env
+      vProb <- evaluate prob (liftObjEnv env)
+      return $ vC :<| vProb
 
 instance Evaluatable Term where
   type EvalRes Term = Value
@@ -176,11 +183,12 @@ evaluateMExt prev lift probHOAS recordHOAS = case prev of
   _ -> throwError AbsOnNonDyn
 
 constrantAsRefl :: VConstraint -> Value
-constrantAsRefl (VTmEq l _ _ _) =
-  if l == 0 then
-    VRefl
-  else
-    VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
+constrantAsRefl (VTmEq tele _ _ _) =
+  let l = size tele
+  in if l == 0 then
+       VRefl
+     else
+       VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
   where
     lamN :: Int -> Term -> Term
     lamN 0 = id

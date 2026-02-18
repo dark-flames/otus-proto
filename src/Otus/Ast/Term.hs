@@ -7,6 +7,7 @@ module Otus.Ast.Term (
   Term (..),
   EffectSet,
   MetaTerm (..),
+  piTele,
 ) where
 
 import Otus.Ast.Effect
@@ -31,7 +32,7 @@ newtype Sequence = Sequence
 type Problem = Seq Constraint
 
 data Constraint
-  = TmEq Int Term Term Term
+  = TmEq Telescope Term Term Term
   deriving (Eq, Show)
 
 type OptionalTy = Maybe Term
@@ -144,3 +145,10 @@ instance Pretty MetaTerm where
 
 instance Show MetaTerm where
   show = pretty
+
+piTele :: Telescope -> Term -> Term
+piTele tele cod = go $ unTele tele
+  where
+    go = \case
+      Empty -> cod
+      ty :<| rst -> Pi ty (go rst)
