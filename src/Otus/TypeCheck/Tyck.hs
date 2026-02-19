@@ -8,7 +8,6 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize
 import Otus.TypeCheck.Context
-import Otus.TypeCheck.Conv
 import Otus.TypeCheck.Error
 import Otus.TypeCheck.Judgement
 
@@ -230,12 +229,8 @@ instance TypeCheck Term where
         Nothing -> return dom
         Just prePTy -> do
           pTy <- inferTy ctx prePTy
-          c <- conv (ctxLvl ctx) pTy dom
-          if c then
-            return pTy
-          else do
-            domTm <- doQuote ctx dom
-            throwError $ Unify preTm prePTy domTm
+          _ <- doConv ctx pTy dom
+          return pTy
 
       cod <- doEvalHOAS liftObjEnv codHOAS
       bodyTm <- check (ctx |:> domTy) body cod
@@ -252,18 +247,12 @@ instance TypeCheck Term where
             jTy = VRecord tele
           }
     (Refl, VId idTy lhs rhs) -> do
-      c <- conv (ctxLvl ctx) lhs rhs
-      if c then
-        return $
-          WfTerm
-            { jTm = Refl,
-              jTy = VId idTy lhs rhs
-            }
-      else do
-        tyTm <- doQuote ctx idTy
-        lhsTm <- doQuote ctx lhs
-        rhsTm <- doQuote ctx rhs
-        throwError $ CannotCheckRefl tyTm lhsTm rhsTm
+      _ <- doConv ctx lhs rhs
+      return $
+        WfTerm
+          { jTm = Refl,
+            jTy = VId idTy lhs rhs
+          }
     (Splicing preMeta, VRecord tele) -> do
       meta <- check ctx preMeta (MVLift tele)
       return $
@@ -273,17 +262,12 @@ instance TypeCheck Term where
           }
     _ -> do
       t <- infer ctx preTm
-      c <- conv (ctxLvl ctx) (tyOf t) ty
-      if c then
-        return $
-          WfTerm
-            { jTm = tmOf t,
-              jTy = ty
-            }
-      else do
-        lTy <- doQuote ctx (tyOf t)
-        rTy <- doQuote ctx ty
-        throwError $ Unify preTm lTy rTy
+      _ <- doConv ctx (tyOf t) ty
+      return $
+        WfTerm
+          { jTm = tmOf t,
+            jTy = ty
+          }
   inferTy' ctx preTy = do
     tyTm <- infer ctx preTy
     case tyOf tyTm of
@@ -512,12 +496,8 @@ instance TypeCheck MetaTerm where
         Nothing -> return dom
         Just prePTy -> do
           pTy <- inferTy ctx prePTy
-          c <- conv (ctxLvl ctx) pTy dom
-          if c then
-            return pTy
-          else do
-            domTm <- doQuote ctx dom
-            throwError $ ComputationUnify preTm prePTy domTm
+          _ <- doConv ctx pTy dom
+          return pTy
 
       cod <- doEvalHOAS (pushEnv $ mvvar $ ctxLvl ctx) codHOAS
       bodyTm <- check (ctx |:> domTy) body cod
@@ -545,18 +525,13 @@ instance TypeCheck MetaTerm where
           }
     _ -> do
       tm <- infer ctx preTm
-      c <- conv (ctxLvl ctx) (tyOf tm) ty
-      if c then
-        return $
-          WfMetaTerm
-            { jTm = tmOf tm,
-              jEff = effOf tm,
-              jTy = ty
-            }
-      else do
-        lTy <- doQuote ctx (tyOf tm)
-        rTy <- doQuote ctx ty
-        throwError $ ComputationUnify preTm lTy rTy
+      _ <- doConv ctx (tyOf tm) ty
+      return $
+        WfMetaTerm
+          { jTm = tmOf tm,
+            jEff = effOf tm,
+            jTy = ty
+          }
 
   inferTy' ctx preTy = do
     tyTm <- infer ctx preTy

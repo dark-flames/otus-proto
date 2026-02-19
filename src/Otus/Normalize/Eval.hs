@@ -4,6 +4,7 @@ module Otus.Normalize.Eval (
   evaluateRest,
   evaluateJ,
   evaluateMApp,
+  evaluateNeutral,
   intoTeleSequence,
   Evaluatable (..),
 ) where
@@ -65,6 +66,16 @@ evaluateSplicing = \case
   MVQuote vRecord -> return $ VList vRecord
   MNeutral var MSNil -> return $ Neutral (NSplicing var) SNil
   _ -> throwError SplicingNonMeta
+
+evaluateNeutral :: Value -> Spine -> EvalResult Value
+evaluateNeutral val = \case
+  SNil -> return val
+  SApp spine p -> do
+    f <- evaluateNeutral val spine
+    evaluateApp f p
+  SFirst spine -> evaluateNeutral val spine >>= evaluateFirst
+  SRest spine -> evaluateNeutral val spine >>= evaluateRest
+  SJ fam p spine -> evaluateNeutral val spine >>= evaluateJ fam p
 
 instance Evaluatable Telescope where
   type EvalRes Telescope = VTelescope

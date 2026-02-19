@@ -19,4 +19,5 @@ data EvalError
   | AbsOnNonDyn
   | ExtOnNonDyn
   | SolveOnNonDyn
+  | UnsolvableTmEq
   deriving (Eq, Show)

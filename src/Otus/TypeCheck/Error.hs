@@ -9,8 +9,11 @@ module Otus.TypeCheck.Error (
   doEvalMApp,
   doQuote,
   doQuote',
+  doConv,
   doIntoTeleSequence,
 ) where
+
+import Control.Monad.Error.Class (throwError)
 
 import Otus.Ast
 import Otus.Common
@@ -20,6 +23,7 @@ import Otus.TypeCheck.Context
 data TypeError
   = EvalError EvalError String
   | HOASEvalError EvalError
+  | ConvError EvalError String String
   | ReadbackError EvalError
   | AppEvalError EvalError String String
   | CannotInferIndex
@@ -32,7 +36,7 @@ data TypeError
   | CannotForce MetaTerm MetaTerm
   | CannotBindOn MetaTerm MetaTerm
   | CannotSplicing MetaTerm MetaTerm
-  | Unify Term Term Term
+  | Unify String String
   | ComputationUnify MetaTerm MetaTerm MetaTerm
   | ValueUnify MetaTerm MetaTerm MetaTerm
   | CannotInferValue MetaTerm
@@ -67,6 +71,22 @@ doEval' ctx p tm =
   case evaluate tm (ctxEnv ctx ||><| fromList p) of
     Success v -> return v
     Failure e -> Failure $ EvalError e (show tm)
+
+doConv
+  :: (ConvCheck v, Quotable v, Show (QuoteRes v))
+  => Context -> v -> v -> TypeCheckResult ()
+doConv ctx lhs rhs = case conv (ctxLvl ctx) lhs rhs of
+  Success c ->
+    if c then
+      return ()
+    else do
+      lhsTm <- doQuote ctx lhs
+      rhsTm <- doQuote ctx rhs
+      throwError $ Unify (show lhsTm) (show rhsTm)
+  Failure e -> do
+    lhsTm <- doQuote ctx lhs
+    rhsTm <- doQuote ctx rhs
+    throwError $ ConvError e (show lhsTm) (show rhsTm)
 
 doEvalVTeleSeq :: Context -> Telescope -> TypeCheckResult VTeleSequence
 doEvalVTeleSeq ctx tele = case evaluate tele (ctxEnv ctx) >>= intoTeleSequence of

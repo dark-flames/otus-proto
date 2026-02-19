@@ -29,13 +29,14 @@ library
       Otus.Common.Utils
       Otus.Normalize
       Otus.Normalize.Control
+      Otus.Normalize.Conv
       Otus.Normalize.Error
       Otus.Normalize.Eval
       Otus.Normalize.Readback
+      Otus.Normalize.Unify
       Otus.Normalize.Value
       Otus.TypeCheck
       Otus.TypeCheck.Context
-      Otus.TypeCheck.Conv
       Otus.TypeCheck.Error
       Otus.TypeCheck.Judgement
       Otus.TypeCheck.Tyck

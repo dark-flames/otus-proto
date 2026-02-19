@@ -1,14 +1,15 @@
-module Otus.TypeCheck.Conv (
+module Otus.Normalize.Conv (
   ConvCheck (..),
 ) where
 
 import Otus.Ast
 import Otus.Common
-import Otus.Normalize
-import Otus.TypeCheck.Error
+import Otus.Normalize.Value
+import Otus.Normalize.Control
+import Otus.Normalize.Eval
 
 class ConvCheck val where
-  conv :: LevelId -> val -> val -> TypeCheckResult Bool
+  conv :: LevelId -> val -> val -> EvalResult Bool
 
 instance ConvCheck VTeleSequence where
   conv lvl lhs rhs = go lvl (unVTele lhs) (unVTele rhs)
@@ -29,8 +30,8 @@ instance ConvCheck VTelescope where
       hConv <- conv lvl lh rh
       if hConv then do
         let pushLvl = pushEnv (vvar lvl)
-        lRst <- doEvalHOAS pushLvl lRstHOAS
-        rRst <- doEvalHOAS pushLvl rRstHOAS
+        lRst <- evalHOAS lRstHOAS pushLvl 
+        rRst <- evalHOAS rRstHOAS pushLvl 
         conv (incrLvl lvl) lRst rRst
       else
         return False
@@ -96,8 +97,8 @@ instance ConvCheck MetaSpine where
     (MSForce lh, MSForce rh) -> conv lvl lh rh
     (MSBind lh lHOAS _, MSBind rh rHOAS _) -> do
       let p = mvvar lvl
-      lbind <- doEvalHOAS (pushEnv p) lHOAS
-      rbind <- doEvalHOAS (pushEnv p) rHOAS
+      lbind <- evalHOAS lHOAS (pushEnv p) 
+      rbind <- evalHOAS rHOAS (pushEnv p) 
       bindConv <- conv (incrLvl lvl) lbind rbind
       if bindConv then
         conv lvl lh rh
@@ -115,20 +116,20 @@ instance ConvCheck Value where
       domConv <- conv lvl lDom rDom
       if domConv then do
         let pushLvl = pushEnv (vvar lvl)
-        lCod <- doEvalHOAS pushLvl lHOAS
-        rCod <- doEvalHOAS pushLvl rHOAS
+        lCod <- evalHOAS lHOAS pushLvl 
+        rCod <- evalHOAS rHOAS pushLvl 
         conv (incrLvl lvl) lCod rCod
       else
         return False
     (VLam _, _) -> do
       let p = vvar lvl
-      lRes <- doEvalApp lvl lhs p
-      rRes <- doEvalApp lvl rhs p
+      lRes <- evaluateApp lhs p
+      rRes <- evaluateApp rhs p
       conv (incrLvl lvl) lRes rRes
     (_, VLam _) -> do
       let p = vvar lvl
-      lRes <- doEvalApp lvl lhs p
-      rRes <- doEvalApp lvl rhs p
+      lRes <- evaluateApp lhs p
+      rRes <- evaluateApp rhs p
       conv (incrLvl lvl) lRes rRes
     (VRecord lTele, VRecord rTele) -> conv lvl lTele rTele
     (VList lr, VList rr) -> conv lvl lr rr
@@ -152,8 +153,8 @@ instance ConvCheck MetaValue where
       metaConv <- conv lvl lMeta rMeta
       problemConv <- conv (shift metaSize lvl) lProblem rProblem
       let pushLvls = liftObjEnvN (metaSize + problemSize)
-      lRecord <- doEvalHOAS pushLvls lRecordHOAS
-      rRecord <- doEvalHOAS pushLvls rRecordHOAS
+      lRecord <- evalHOAS lRecordHOAS pushLvls
+      rRecord <- evalHOAS rRecordHOAS pushLvls
       recordConv <- conv (shift (metaSize + problemSize) lvl) lRecord rRecord
       return $ metaConv && problemConv && recordConv
     -- computation
@@ -162,20 +163,20 @@ instance ConvCheck MetaValue where
       let eConv = le `lte` re == Just True
       if domConv && eConv then do
         let pushLvl = pushEnv (mvvar lvl)
-        lCod <- doEvalHOAS pushLvl lHOAS
-        rCod <- doEvalHOAS pushLvl rHOAS
+        lCod <- evalHOAS lHOAS pushLvl 
+        rCod <- evalHOAS rHOAS pushLvl 
         conv (incrLvl lvl) lCod rCod
       else
         return False
     (MVLam _, _) -> do
       let p = mvvar lvl
-      lRes <- doEvalMApp lvl lhs p
-      rRes <- doEvalMApp lvl rhs p
+      lRes <- evaluateMApp lhs p
+      rRes <- evaluateMApp rhs p
       conv (incrLvl lvl) lRes rRes
     (_, MVLam _) -> do
       let p = mvvar lvl
-      lRes <- doEvalMApp lvl lhs p
-      rRes <- doEvalMApp lvl rhs p
+      lRes <- evaluateMApp lhs p
+      rRes <- evaluateMApp rhs p
       conv (incrLvl lvl) lRes rRes
     (MVF lv, MVF rv) -> conv lvl lv rv
     (MVReturn lv, MVReturn rv) -> conv lvl lv rv
