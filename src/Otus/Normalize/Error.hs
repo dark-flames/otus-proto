@@ -20,4 +20,8 @@ data EvalError
   | ExtOnNonDyn
   | SolveOnNonDyn
   | UnsolvableTmEq
+  | CannotSolveEnvVar
+  | CannotSolveConstraintVar
+  | CannotSolveLocalVar
+  | CannotSoveMetaTwice
   deriving (Eq, Show)

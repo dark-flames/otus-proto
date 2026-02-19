@@ -15,6 +15,7 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Error
+import Otus.Normalize.Unify.Unify (unifyTm)
 import Otus.Normalize.Value
 
 class (Show t) => Evaluatable t where
@@ -211,6 +212,7 @@ evaluateSolve = \case
     solved <- undefined
     let metaRes = singleton $ vvar 0 -- todo: unimplement
     let probRes = fmap constrantAsRefl prob
+    let _todo = unifyTm
     if solved then do
       record <- evalHOAS recordHOAS (pushEnvN probRes . pushEnvN metaRes)
       return $ MVQuote record

@@ -75,7 +75,7 @@ doEval' ctx p tm =
 doConv
   :: (ConvCheck v, Quotable v, Show (QuoteRes v))
   => Context -> v -> v -> TypeCheckResult ()
-doConv ctx lhs rhs = case conv (ctxLvl ctx) lhs rhs of
+doConv ctx lhs rhs = case execConv (ctxLvl ctx) $ conv (ctxLvl ctx) lhs rhs of
   Success c ->
     if c then
       return ()

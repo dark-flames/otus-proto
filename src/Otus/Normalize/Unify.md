@@ -51,7 +51,7 @@ doSolveMeta :: MetaId -> Value -> SolveMonad ()
 doSolveMeta m val = do
   modifyMetaCtx $ solveMeta m val
   setModified
-  lift $ ResultT $ Consistant (Success ())
+  lift $ ResultT $ Consistent (Success ())
 
 metaSize :: SolveMonad Int
 metaSize = size <$> getMetaCtx
@@ -70,35 +70,35 @@ newtype MetaSubst = MSubst (Seq (Maybe Value))
 
 -- Control
 data SolveResult res
-  = Consistant res
+  = Consistent res
   | Conflict
   deriving (Eq, Show)
 
 instance Functor SolveResult where
   fmap f = \case
     Conflict -> Conflict
-    Consistant r -> Consistant $ f r
+    Consistent r -> Consistent $ f r
 
 instance Applicative SolveResult where
-  pure = Consistant
+  pure = Consistent
 
   Conflict <*> _ = Conflict
   _ <*> Conflict = Conflict
-  (Consistant f) <*> (Consistant a) = Consistant $ f a
+  (Consistent f) <*> (Consistent a) = Consistent $ f a
 
 instance Monad SolveResult where
   Conflict >>= _ = Conflict
-  Consistant r >>= f = case f r of
+  Consistent r >>= f = case f r of
     Conflict -> Conflict
-    Consistant r' -> Consistant r'
+    Consistent r' -> Consistent r'
 
 type SolveMonad = StateT SolveState (ObjEvalResultT SolveResult)
 
 runSolveMonad :: SolveMonad a -> MetaContext -> ObjEvalResult (SolveResult (a, SolveState))
 runSolveMonad m env = case runResultT (runStateT m (SolveState env False)) of
   Conflict -> return Conflict
-  Consistant (Success r) -> return $ Consistant r
-  Consistant (Failure e) -> throwError e
+  Consistent (Success r) -> return $ Consistent r
+  Consistent (Failure e) -> throwError e
 
 liftEvalResult :: ObjEvalResult a -> SolveMonad a
 liftEvalResult eval = lift $ ResultT (pure eval)
@@ -119,7 +119,7 @@ solveProblem mctx (VProb s) = do
   res <- runSolveMonad (solveConstraintSet s) mctx
   case res of
     Conflict -> return Nothing
-    Consistant (s', SolveState mctx' _) -> return $ Just (VProb s', mctx')
+    Consistent (s', SolveState mctx' _) -> return $ Just (VProb s', mctx')
 
 solveConstraintSet :: ConstraintSeq -> SolveMonad ConstraintSeq
 solveConstraintSet s = do
