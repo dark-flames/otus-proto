@@ -28,6 +28,7 @@ module Otus.Normalize.Value (
   vvar,
   mvvar,
   emptyEnv,
+  trivalEnv,
   varSeq,
 ) where
 
@@ -207,6 +208,14 @@ mvvar lvl = MNeutral lvl MSNil
 
 emptyEnv :: Environment
 emptyEnv = Env mempty
+
+trivalEnv :: LevelId -> Environment
+trivalEnv (LevelId s) =
+  let
+    vs :: Seq Value
+    vs = varSeq [0 .. s]
+  in
+    emptyEnv ||><| vs
 
 varSeq :: (Domain v) => [Int] -> Seq v
 varSeq = fromList . map (domVar . LevelId)

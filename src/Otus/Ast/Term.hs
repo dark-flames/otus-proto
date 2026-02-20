@@ -155,5 +155,6 @@ piTele tele cod = go $ unTele tele
       ty :<| rst -> Pi ty (go rst)
 
 lamN :: Int -> Term -> Term
-lamN 0 = id
-lamN x = lamN (x - 1) . Lam Nothing
+lamN = \case
+  x | x > 0 -> Lam Nothing . lamN (x - 1)
+  _ -> id

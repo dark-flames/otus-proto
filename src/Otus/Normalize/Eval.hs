@@ -6,6 +6,7 @@ module Otus.Normalize.Eval (
   evaluateJ,
   evaluateMApp,
   evaluateNeutral,
+  evaluateTerm,
   intoTeleSequence,
   Evaluatable (..),
 ) where
@@ -78,6 +79,9 @@ evaluateNeutral val = \case
   SFirst spine -> evaluateNeutral val spine >>= evaluateFirst
   SRest spine -> evaluateNeutral val spine >>= evaluateRest
   SJ fam p spine -> evaluateNeutral val spine >>= evaluateJ fam p
+
+evaluateTerm :: Term -> Environment -> EvalResult Value
+evaluateTerm = evaluate
 
 instance Evaluatable Telescope where
   type EvalRes Telescope = VTelescope

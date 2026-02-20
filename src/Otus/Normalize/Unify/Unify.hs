@@ -6,6 +6,7 @@ module Otus.Normalize.Unify.Unify (
 import Control.Monad (when)
 import Control.Monad.Error.Class (MonadError (throwError))
 
+import qualified Data.IntMap as IM
 import qualified Data.Set as Set
 
 import Otus.Ast
@@ -139,17 +140,151 @@ solveProblem lvl metaSize problem = do
   readSolveResultRecord
 
 -- Unification
+data PartialRenaming = PRen
+  { prDom :: LevelId,
+    prCod :: LevelId,
+    prRen :: IM.IntMap LevelId
+  }
+  deriving (Eq, Show)
+
+liftPRenaming :: PartialRenaming -> PartialRenaming
+liftPRenaming (PRen dom cod ren) =
+  PRen (dom + 1) (cod + 1) (IM.insert (unLevel cod) dom ren)
+
+invert :: LevelId -> Spine -> UnifyMonad (Maybe (PartialRenaming, Int))
+invert cod sp =
+  go sp >>= \case
+    Just (dom, ren, s) -> return $ Just (PRen dom cod ren, s)
+    _ -> return Nothing
+  where
+    go :: Spine -> UnifyMonad (Maybe (LevelId, IM.IntMap LevelId, Int))
+    go = \case
+      SNil -> return $ Just (0, mempty, 0)
+      SApp sp' param ->
+        go sp' >>= \case
+          Just (dom, ren, s) -> do
+            param' <- force param
+            case param' of
+              Neutral (NVar l@(LevelId x)) SNil ->
+                findEntry l >>= \case
+                  LocalVar ->
+                    if IM.notMember x ren then
+                      return $ Just (dom + 1, IM.insert x dom ren, s + 1)
+                    else
+                      return Nothing
+                  _ -> return Nothing
+              _ -> return Nothing
+          _ -> return Nothing
+      _ -> return Nothing
+
+rename :: LevelId -> PartialRenaming -> Value -> UnifyMonad (Maybe Term)
+rename m = go
+  where
+    goSpine :: PartialRenaming -> Term -> Spine -> UnifyMonad (Maybe Term)
+    goSpine pren h = \case
+      SNil -> return $ Just h
+      SApp s a -> do
+        ma <- go pren a
+        case ma of
+          Just a' -> goSpine pren (App h a') s
+          Nothing -> return Nothing
+      SFirst s -> goSpine pren (First h) s
+      SRest s -> goSpine pren (Rest h) s
+      SJ fam p s -> do
+        mfam <- go pren fam
+        mp <- go pren p
+        case (mfam, mp) of
+          (Just fam', Just p') -> goSpine pren (J fam' p' h) s
+          _ -> return Nothing
+
+    goTelescope :: PartialRenaming -> VTelescope -> UnifyMonad (Maybe Telescope)
+    goTelescope pren = \case
+      VTNil -> return $ Just (TeleSeq Empty)
+      VTCons ty hoas -> do
+        mTyTm <- go pren ty
+        rst <- liftEval $ evalHOAS hoas (pushEnv $ vvar (prCod pren))
+        mRst <- goTelescope (liftPRenaming pren) rst
+        return $ do
+          tyTm <- mTyTm
+          TeleSeq rstSeq <- mRst
+          return $ TeleSeq (tyTm <| rstSeq)
+
+    go :: PartialRenaming -> Value -> UnifyMonad (Maybe Term)
+    go pren t =
+      force t
+        >>= \case
+          Neutral (NSplicing l) sp -> goSpine pren (Var $ toIndex (prDom pren) l) sp
+          Neutral (NVar l) sp ->
+            findEntry l >>= \case
+              EnvVar -> goSpine pren (Var $ toIndex (prDom pren) l) sp
+              MetaVar _ ->
+                if l < m then
+                  goSpine pren (Var $ toIndex (prDom pren) l) sp
+                else
+                  return Nothing
+              ConstraintProof _ -> return Nothing
+              LocalVar -> case IM.lookup (unLevel l) (prRen pren) of
+                Nothing -> return Nothing
+                Just l' -> goSpine pren (Var $ toIndex (prDom pren) l') sp
+          VLam hoas -> do
+            body <- liftEval $ evalHOAS hoas (pushEnv $ vvar (prCod pren))
+            mBodyTm <- go (liftPRenaming pren) body
+            return $ Lam Nothing <$> mBodyTm
+          VPi a hoas -> do
+            mATm <- go pren a
+            b <- liftEval $ evalHOAS hoas (pushEnv $ vvar (prCod pren))
+            mBTm <- go (liftPRenaming pren) b
+            return $ Pi <$> mATm <*> mBTm
+          VRecord tele -> do
+            mTele <- goTelescope pren tele
+            return $ Record <$> mTele
+          VList record -> do
+            mRecord <- traverse (go pren) record
+            return $ List . RecordSeq <$> sequenceA mRecord
+          VId ty a b -> do
+            mTyTm <- go pren ty
+            mATm <- go pren a
+            mBTm <- go pren b
+            return $ Id <$> mTyTm <*> mATm <*> mBTm
+          VRefl -> return $ Just Refl
+          VType i -> return $ Just (Type i)
+
 solveMetaEntry :: LevelId -> LevelId -> Spine -> Value -> UnifyMonad SolveResult
-solveMetaEntry = undefined
+solveMetaEntry lvl metaId sp rhs =
+  invert lvl sp >>= \case
+    Just (pren, spSize) ->
+      rename metaId pren rhs >>= \case
+        Just rhsTm -> do
+          let solutionTm = lamN spSize rhsTm
+          solution <- liftEval $ evaluateTerm solutionTm (trivalEnv lvl)
+          setEntry metaId (MetaVar (Just solution))
+          return $ SolveResult mempty (Set.singleton metaId)
+        _ -> postponeEquation
+    _ -> postponeEquation
+  where
+    postponeEquation :: UnifyMonad SolveResult
+    postponeEquation =
+      return $
+        SolveResult
+          ( singleton
+              ( Equation
+                  { eLvl = lvl,
+                    eLhs = Neutral (NVar metaId) sp,
+                    eRhs = rhs,
+                    stuckOn = Set.singleton metaId -- todo: meta in rhs
+                  }
+              )
+          )
+          mempty
 
 solveEntry :: LevelId -> LevelId -> Spine -> Value -> UnifyMonad SolveResult
 solveEntry lvl i spine val =
   findEntry i >>= \case
-    EnvVar -> conflict
+    EnvVar -> throwError CannotSolveEnvVar
     MetaVar Nothing -> solveMetaEntry lvl i spine val
-    MetaVar _ -> throwError CannotSoveMetaTwice
-    ConstraintProof _ -> conflict
-    LocalVar -> conflict
+    MetaVar _ -> throwError CannotSolveMetaTwice
+    ConstraintProof _ -> throwError CannotSolveConstraintProof
+    LocalVar -> throwError CannotSolveLocalVar
 
 unifyTelescope :: LevelId -> VTelescope -> VTelescope -> UnifyMonad SolveResult
 unifyTelescope lvl lhs rhs = case (lhs, rhs) of
@@ -163,20 +298,29 @@ unifyTelescope lvl lhs rhs = case (lhs, rhs) of
     return $ ch <> cr
   _ -> conflict
 
+unifyRecord :: LevelId -> VRecord -> VRecord -> UnifyMonad SolveResult
+unifyRecord lvl lhs rhs = case (lhs, rhs) of
+  (Empty, Empty) -> return mempty
+  (l :<| lRst, r :<| rRst) -> do
+    hRes <- unifyTm lvl l r
+    rstRes <- unifyRecord lvl lRst rRst
+    return $ hRes <> rstRes
+  _ -> conflict
+
 unifySpine :: LevelId -> Spine -> Spine -> UnifyMonad SolveResult
 unifySpine lvl lhs rhs = case (lhs, rhs) of
   (SNil, SNil) -> return mempty
   (SApp lsp l, SApp rsp r) -> do
-    cs <- unifySpine lvl lsp rsp
-    c <- unifyTm lvl l r
-    return $ cs <> c
+    sRes <- unifySpine lvl lsp rsp
+    pRes <- unifyTm lvl l r
+    return $ sRes <> pRes
   (SFirst lsp, SFirst rsp) -> unifySpine lvl lsp rsp
   (SRest lsp, SRest rsp) -> unifySpine lvl lsp rsp
   (SJ lFam lp lsp, SJ rFam rp rsp) -> do
-    cFam <- unifyTm (shift 2 lvl) lFam rFam
-    cp <- unifyTm lvl lp rp
-    cs <- unifySpine lvl lsp rsp
-    return $ cFam <> cp <> cs
+    famRes <- unifyTm (shift 2 lvl) lFam rFam
+    pRes <- unifyTm lvl lp rp
+    sRes <- unifySpine lvl lsp rsp
+    return $ famRes <> pRes <> sRes
   _ -> conflict
 
 unifyTm :: LevelId -> Value -> Value -> UnifyMonad SolveResult
@@ -200,8 +344,6 @@ unifyTm lvl lhs rhs = do
     (VType i, VType j) -> if i == j then return mempty else conflict
     (VLam _, _) -> unifyLam lhs' rhs'
     (_, VLam _) -> unifyLam lhs' rhs'
-    (VList r, _) -> unifyList r lhs' rhs'
-    (_, VList r) -> unifyList r lhs' rhs'
     (Neutral (NSplicing l) lSpine, Neutral (NSplicing r) rSpine) ->
       if l == r then
         unifySpine lvl lSpine rSpine
@@ -224,6 +366,7 @@ unifyTm lvl lhs rhs = do
         _ -> conflict
     (Neutral (NVar l) lSpine, _) -> solveEntry lvl l lSpine rhs'
     (_, Neutral (NVar r) rSpine) -> solveEntry lvl r rSpine lhs'
+    (VList lr, VList rr) -> unifyRecord lvl lr rr -- todo : eta-conv for record
     _ -> conflict
   where
     postponeEquation stuck lhs' rhs' =
@@ -240,24 +383,6 @@ unifyTm lvl lhs rhs = do
       lBody <- liftEval $ evaluateApp lhs' lvlVar
       rBody <- liftEval $ evaluateApp rhs' lvlVar
       unifyTm (incrLvl lvl) lBody rBody
-
-    unifyList r lhs' rhs' = case size r of
-      0 -> return mempty
-      1 -> do
-        lFst <- liftEval $ evaluateFirst lhs'
-        rFst <- liftEval $ evaluateFirst rhs'
-
-        unifyTm lvl lFst rFst
-      _ -> do
-        lFst <- liftEval $ evaluateFirst lhs'
-        rFst <- liftEval $ evaluateFirst rhs'
-        fstRes <- unifyTm lvl lFst rFst
-
-        lRst <- liftEval $ evaluateRest lhs'
-        rRst <- liftEval $ evaluateRest rhs'
-        rstRes <- unifyTm lvl lRst rRst
-
-        return $ fstRes <> rstRes
 
     flexFlex l lSpine r rSpine lhs' rhs' =
       -- Same metavariable on both sides.

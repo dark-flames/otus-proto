@@ -23,5 +23,5 @@ data EvalError
   | CannotSolveEnvVar
   | CannotSolveConstraintProof
   | CannotSolveLocalVar
-  | CannotSoveMetaTwice
+  | CannotSolveMetaTwice
   deriving (Eq, Show)

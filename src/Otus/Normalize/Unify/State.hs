@@ -2,6 +2,8 @@ module Otus.Normalize.Unify.State (
   Entry (..),
   UnifyEnv (..),
   findEntry,
+  isMetaEntry,
+  isLocalEntry,
   setEntry,
   setProblemLvl,
   incrProblemLvl,
@@ -66,6 +68,18 @@ setEntry lvl entry = do
     let idx = sub lvl (baseLvl uEnv)
     let newEntries = Seq.update idx entry (entries uEnv)
     put (UnifyEnv (baseLvl uEnv) newEntries (problemLvl uEnv))
+
+isMetaEntry :: LevelId -> UnifyMonad Bool
+isMetaEntry lvl =
+  findEntry lvl >>= \case
+    MetaVar _ -> return True
+    _ -> return False
+
+isLocalEntry :: LevelId -> UnifyMonad Bool
+isLocalEntry lvl =
+  findEntry lvl >>= \case
+    LocalVar -> return True
+    _ -> return False
 
 setProblemLvl :: LevelId -> UnifyMonad ()
 setProblemLvl lvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) lvl)
