@@ -21,7 +21,7 @@ data EvalError
   | SolveOnNonDyn
   | UnsolvableTmEq
   | CannotSolveEnvVar
-  | CannotSolveConstraintVar
+  | CannotSolveConstraintProof
   | CannotSolveLocalVar
   | CannotSoveMetaTwice
   deriving (Eq, Show)

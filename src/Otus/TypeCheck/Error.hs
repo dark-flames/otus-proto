@@ -21,37 +21,37 @@ import Otus.Normalize
 import Otus.TypeCheck.Context
 
 data TypeError
-  = EvalError EvalError String
-  | HOASEvalError EvalError
-  | ConvError EvalError String String
-  | ReadbackError EvalError
-  | AppEvalError EvalError String String
+  = EvaluationError EvalError String
+  | HoasEvaluationError EvalError
+  | ConversionError EvalError String String
+  | QuoteError EvalError
+  | ApplicationEvaluationError EvalError String String
   | CannotInferIndex
-  | CannotInferObjAsMeta
-  | CannotInferMetaAsObj
+  | CannotInferObjectAsMeta
+  | CannotInferMetaAsObject
+  | CannotInferObjectTerm Term
+  | CannotInferMetaTerm MetaTerm
+  | CannotInferComputation MetaTerm
+  | ExpectedMetaType MetaTerm
+  | ExpectedFunctionType Term Term
+  | ExpectedMetaFunctionType MetaTerm MetaTerm
+  | ExpectedDynamicType MetaTerm MetaTerm
+  | ExpectedNonEmptyRecordType Term Term
+  | ExpectedIdentityType Term Term
   | CannotCheckRecord Record Telescope
   | CannotCheckAsMetaType MetaTerm MetaTerm
   | CannotCheckAsThunk MetaTerm MetaTerm
   | CannotCheckRefl Term Term Term
   | CannotForce MetaTerm MetaTerm
   | CannotBindOn MetaTerm MetaTerm
-  | CannotSplicing MetaTerm MetaTerm
-  | Unify String String
+  | CannotSplice MetaTerm MetaTerm
+  | UnificationFailure String String
   | ComputationUnify MetaTerm MetaTerm MetaTerm
   | ValueUnify MetaTerm MetaTerm MetaTerm
-  | CannotInferValue MetaTerm
-  | CannotInferComputation MetaTerm
-  | CannotInferTerm Term
-  | ComputationEffErr MetaTerm EffectSet EffectSet
+  | ComputationEffectError MetaTerm EffectSet EffectSet
   | CannotCheckAsType String
-  | ExpectedToBeMetaTy MetaTerm
-  | ExpectedToBeFn Term Term
-  | ExpectedToBeMetaFn MetaTerm MetaTerm
-  | ExpectedToBeDyn MetaTerm MetaTerm
-  | ExpectedToBeNonEmptyRecord Term Term
-  | ExpectedToBeIdeneity Term Term
   | UnexpectedLift MetaTerm Int
-  | AnyhowTyErr String
+  | TypeCheckInternalError String
   deriving (Show)
 
 type TypeCheckResult = Result TypeError
@@ -62,7 +62,7 @@ doEval
 doEval ctx tm =
   case evaluate tm (ctxEnv ctx) of
     Success v -> return v
-    Failure e -> Failure $ EvalError e (show tm)
+    Failure e -> Failure $ EvaluationError e (show tm)
 
 doEval'
   :: (EnvVal v, Evaluatable tm)
@@ -70,7 +70,7 @@ doEval'
 doEval' ctx p tm =
   case evaluate tm (ctxEnv ctx ||><| fromList p) of
     Success v -> return v
-    Failure e -> Failure $ EvalError e (show tm)
+    Failure e -> Failure $ EvaluationError e (show tm)
 
 doConv
   :: (ConvCheck v, Quotable v, Show (QuoteRes v))
@@ -82,26 +82,26 @@ doConv ctx lhs rhs = case execConv (ctxLvl ctx) $ conv (ctxLvl ctx) lhs rhs of
     else do
       lhsTm <- doQuote ctx lhs
       rhsTm <- doQuote ctx rhs
-      throwError $ Unify (show lhsTm) (show rhsTm)
+      throwError $ UnificationFailure (show lhsTm) (show rhsTm)
   Failure e -> do
     lhsTm <- doQuote ctx lhs
     rhsTm <- doQuote ctx rhs
-    throwError $ ConvError e (show lhsTm) (show rhsTm)
+    throwError $ ConversionError e (show lhsTm) (show rhsTm)
 
 doEvalVTeleSeq :: Context -> Telescope -> TypeCheckResult VTeleSequence
 doEvalVTeleSeq ctx tele = case evaluate tele (ctxEnv ctx) >>= intoTeleSequence of
   Success v -> return v
-  Failure e -> Failure $ EvalError e (show tele)
+  Failure e -> Failure $ EvaluationError e (show tele)
 
 doIntoTeleSequence :: VTelescope -> TypeCheckResult VTeleSequence
 doIntoTeleSequence tele = case intoTeleSequence tele of
   Success v -> return v
-  Failure e -> Failure $ EvalError e "intoTeleSeq"
+  Failure e -> Failure $ EvaluationError e "intoTeleSeq"
 
 doEvalHOAS :: (Environment -> Environment) -> HOAS v -> TypeCheckResult v
 doEvalHOAS f hoas = case evalHOAS hoas f of
   Success v -> return v
-  Failure e -> Failure $ HOASEvalError e
+  Failure e -> Failure $ HoasEvaluationError e
 
 doQuote :: (Quotable v) => Context -> v -> TypeCheckResult (QuoteRes v)
 doQuote ctx = doQuote' (ctxLvl ctx)
@@ -109,7 +109,7 @@ doQuote ctx = doQuote' (ctxLvl ctx)
 doQuote' :: (Quotable v) => LevelId -> v -> TypeCheckResult (QuoteRes v)
 doQuote' lvl v = case quote lvl v of
   Success t -> return t
-  Failure e -> Failure $ ReadbackError e
+  Failure e -> Failure $ QuoteError e
 
 doEvalApp :: LevelId -> Value -> Value -> TypeCheckResult Value
 doEvalApp lvl f p = case evaluateApp f p of
@@ -117,7 +117,7 @@ doEvalApp lvl f p = case evaluateApp f p of
   Failure e -> do
     fTm <- doQuote' lvl f
     pTm <- doQuote' lvl p
-    Failure $ AppEvalError e (show fTm) (show pTm)
+    Failure $ ApplicationEvaluationError e (show fTm) (show pTm)
 
 doEvalMApp :: LevelId -> MetaValue -> MetaValue -> TypeCheckResult MetaValue
 doEvalMApp lvl f p = case evaluateMApp f p of
@@ -125,4 +125,4 @@ doEvalMApp lvl f p = case evaluateMApp f p of
   Failure e -> do
     fTm <- doQuote' lvl f
     pTm <- doQuote' lvl p
-    Failure $ AppEvalError e (show fTm) (show pTm)
+    Failure $ ApplicationEvaluationError e (show fTm) (show pTm)

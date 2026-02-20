@@ -8,6 +8,7 @@ module Otus.Ast.Term (
   EffectSet,
   MetaTerm (..),
   piTele,
+  lamN,
 ) where
 
 import Otus.Ast.Effect
@@ -152,3 +153,7 @@ piTele tele cod = go $ unTele tele
     go = \case
       Empty -> cod
       ty :<| rst -> Pi ty (go rst)
+
+lamN :: Int -> Term -> Term
+lamN 0 = id
+lamN x = lamN (x - 1) . Lam Nothing

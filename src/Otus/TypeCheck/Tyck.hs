@@ -98,7 +98,7 @@ instance TypeCheck Term where
             { jTm = Var idx,
               jTy = ty
             }
-      Just (MetaTy _) -> throwError CannotInferMetaAsObj
+      Just (MetaTy _) -> throwError CannotInferMetaAsObject
       _ -> throwError CannotInferIndex
     TyAnnotation preTm preTy -> do
       ty <- inferTy ctx preTy
@@ -143,7 +143,7 @@ instance TypeCheck Term where
               }
         fTy -> do
           fTyTm <- doQuote ctx fTy
-          throwError $ ExpectedToBeFn (tmOf fTm) fTyTm
+          throwError $ ExpectedFunctionType (tmOf fTm) fTyTm
     Record preTele -> do
       (teleTm, l) <- inferTelescope ctx preTele
       return $
@@ -162,7 +162,7 @@ instance TypeCheck Term where
               }
         ty -> do
           tyTm <- doQuote ctx ty
-          throwError $ ExpectedToBeNonEmptyRecord preTm tyTm
+          throwError $ ExpectedNonEmptyRecordType preTm tyTm
     Rest preTm -> do
       t <- infer ctx preTm
       case tyOf t of
@@ -176,7 +176,7 @@ instance TypeCheck Term where
               }
         ty -> do
           tyTm <- doQuote ctx ty
-          throwError $ ExpectedToBeNonEmptyRecord preTm tyTm
+          throwError $ ExpectedNonEmptyRecordType preTm tyTm
     Id preTy preLhs preRhs -> do
       (idTyTm, idTy, l) <- inferTy' ctx preTy
       lhsTm <- check ctx preLhs idTy
@@ -208,7 +208,7 @@ instance TypeCheck Term where
               }
         eqTy -> do
           eqTyTm <- doQuote ctx eqTy
-          throwError $ ExpectedToBeIdeneity preEq eqTyTm
+          throwError $ ExpectedIdentityType preEq eqTyTm
     Splicing preMeta -> do
       meta <- infer ctx preMeta
       case tyOf meta of
@@ -220,8 +220,8 @@ instance TypeCheck Term where
               }
         metaTy -> do
           metaTyTm <- doQuote ctx metaTy
-          throwError $ CannotSplicing preMeta metaTyTm
-    preTm -> throwError $ CannotInferTerm preTm
+          throwError $ CannotSplice preMeta metaTyTm
+    preTm -> throwError $ CannotInferObjectTerm preTm
 
   check ctx preTm ty = case (preTm, ty) of
     (Lam oty body, VPi dom codHOAS) -> do
@@ -285,7 +285,7 @@ instance TypeCheck MetaTerm where
     MVar idx -> case ctx @? idx of
       Just (MetaTy ty) ->
         return $ wfMetaValue (MVar idx) ty
-      Just (ObjTy _) -> throwError CannotInferObjAsMeta
+      Just (ObjTy _) -> throwError CannotInferObjectAsMeta
       _ -> throwError CannotInferIndex
     MTyAnnotation preTm preTy -> do
       ty <- inferTy ctx preTy
@@ -319,7 +319,7 @@ instance TypeCheck MetaTerm where
           return $ wfMetaValue (MAbsMeta (tmOf tyTm) (tmOf tm)) (MVDyn tele)
         innerTy -> do
           innerTyTm <- doQuote ctx' innerTy
-          throwError $ ExpectedToBeDyn preTm innerTyTm
+          throwError $ ExpectedDynamicType preTm innerTyTm
     ---- Computation
     MPi dom eff cod -> do
       -- Γ |- Dom vtype @ domL
@@ -364,7 +364,7 @@ instance TypeCheck MetaTerm where
               }
         fTy -> do
           fTyTm <- doQuote ctx fTy
-          throwError $ ExpectedToBeMetaFn (MApp f p) fTyTm
+          throwError $ ExpectedMetaFunctionType (MApp f p) fTyTm
     MF preTy -> do
       -- Γ |- A vtype @ l
       (tyTm, _, l) <- inferTy' ctx preTy
@@ -442,7 +442,7 @@ instance TypeCheck MetaTerm where
               }
         ty -> do
           tyTm <- doQuote ctx ty
-          throwError $ ExpectedToBeDyn preTm tyTm
+          throwError $ ExpectedDynamicType preTm tyTm
     -- Γ |- CTy(l) :> CTy(suc l)
     MCType l ->
       return $
@@ -451,7 +451,7 @@ instance TypeCheck MetaTerm where
             jEff = mempty,
             jTy = MVCType (l + 1)
           }
-    preTm -> throwError $ CannotInferValue preTm
+    preTm -> throwError $ CannotInferMetaTerm preTm
 
   check ctx preTm ty = case (preTm, ty) of
     (MThunk c, MVU e cTy) -> do
@@ -462,7 +462,7 @@ instance TypeCheck MetaTerm where
       if (e `gte` effOf cTm) == Just True then
         return $ wfMetaValue (MThunk (tmOf cTm)) (MVU e (tyOf cTm))
       else
-        throwError $ ComputationEffErr c (effOf cTm) e
+        throwError $ ComputationEffectError c (effOf cTm) e
     (MQuote preRecord, MVLift vTele) -> do
       record <- checkRecord ctx preRecord vTele
       return $ wfMetaValue (MQuote record) (MVLift vTele)
@@ -489,7 +489,7 @@ instance TypeCheck MetaTerm where
             throwError $ UnexpectedLift (MExt prePrev lift preProblem preRecord) (size prevTeleSeq)
         prevTy -> do
           prevTyTm <- doQuote ctx prevTy
-          throwError $ ExpectedToBeDyn prePrev prevTyTm
+          throwError $ ExpectedDynamicType prePrev prevTyTm
     ---- Computation
     (MLam oty body, MVPi dom eff codHOAS) -> do
       domTy <- case oty of
@@ -542,4 +542,4 @@ instance TypeCheck MetaTerm where
       MVCType l -> do
         cTy <- doEval ctx (tmOf tyTm)
         return (tyTm, cTy, l)
-      _ -> throwError $ ExpectedToBeMetaTy preTy
+      _ -> throwError $ ExpectedMetaType preTy

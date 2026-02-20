@@ -1,4 +1,5 @@
 module Otus.Normalize.Eval (
+  constraintAsRefl,
   evaluateApp,
   evaluateFirst,
   evaluateRest,
@@ -194,24 +195,20 @@ evaluateMExt prev lift probHOAS recordHOAS = case prev of
   MNeutral h spine -> return $ MNeutral h (MSExt spine lift probHOAS recordHOAS)
   _ -> throwError AbsOnNonDyn
 
-constrantAsRefl :: VConstraint -> Value
-constrantAsRefl (VTmEq tele _ _ _) =
+constraintAsRefl :: VConstraint -> Value
+constraintAsRefl (VTmEq tele _ _ _) =
   let l = size tele
   in if l == 0 then
        VRefl
      else
        VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
-  where
-    lamN :: Int -> Term -> Term
-    lamN 0 = id
-    lamN x = Lam Nothing . lamN (x - 1)
 
 evaluateSolve :: MetaValue -> EvalResult MetaValue
 evaluateSolve = \case
   MVGuard _meta prob recordHOAS -> do
     solved <- undefined
     let metaRes = singleton $ vvar 0 -- todo: unimplement
-    let probRes = fmap constrantAsRefl prob
+    let probRes = fmap constraintAsRefl prob
     let _todo = unifyTm
     if solved then do
       record <- evalHOAS recordHOAS (pushEnvN probRes . pushEnvN metaRes)

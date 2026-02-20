@@ -85,6 +85,19 @@ instance ConvCheck Value where
   conv lvl lhs' rhs' = do
     lhs <- force lhs'
     rhs <- force rhs'
+    let listConv r = case size r of
+          0 -> return ()
+          1 -> do
+            lFst <- liftEval $ evaluateFirst lhs
+            rFst <- liftEval $ evaluateFirst rhs
+            conv lvl lFst rFst
+          _ -> do
+            lFst <- liftEval $ evaluateFirst lhs
+            rFst <- liftEval $ evaluateFirst rhs
+            conv lvl lFst rFst
+            lRst <- liftEval $ evaluateRest lhs
+            rRst <- liftEval $ evaluateRest rhs
+            conv lvl lRst rRst
     case (lhs, rhs) of
       (Neutral lh ls, Neutral rh rs) -> case (lh, rh) of
         (NVar l, NVar r) -> if l == r then conv lvl ls rs else conflict
@@ -107,7 +120,8 @@ instance ConvCheck Value where
         rRes <- liftEval $ evaluateApp rhs p
         conv (incrLvl lvl) lRes rRes
       (VRecord lTele, VRecord rTele) -> conv lvl lTele rTele
-      (VList lr, VList rr) -> conv lvl lr rr
+      (VList r, _) -> listConv r
+      (_, VList r) -> listConv r
       _ -> conflict
 
 instance ConvCheck MetaValue where
