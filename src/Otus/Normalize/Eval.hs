@@ -17,7 +17,8 @@ import Otus.Ast
 import Otus.Common
 import Otus.Normalize.Control
 import Otus.Normalize.Error
-import Otus.Normalize.Unify.Unify (unifyTm)
+import Otus.Normalize.Unify.State
+import Otus.Normalize.Unify.Unify
 import Otus.Normalize.Value
 
 class (Show t) => Evaluatable t where
@@ -207,18 +208,16 @@ constraintAsRefl (VTmEq tele _ _ _) =
      else
        VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
 
-evaluateSolve :: MetaValue -> EvalResult MetaValue
-evaluateSolve = \case
-  MVGuard _meta prob recordHOAS -> do
-    solved <- undefined
-    let metaRes = singleton $ vvar 0 -- todo: unimplement
-    let probRes = fmap constraintAsRefl prob
-    let _todo = unifyTm
-    if solved then do
-      record <- evalHOAS recordHOAS (pushEnvN probRes . pushEnvN metaRes)
-      return $ MVQuote record
-    else
-      return $ MVTrigger Unification
+evaluateSolve :: LevelId -> MetaValue -> EvalResult MetaValue
+evaluateSolve lvl = \case
+  MVGuard meta prob recordHOAS -> do
+    let metaSize = size meta
+    solveRes <- execUnifyMonad (solveProblem lvl metaSize prob) (emptyUnifyEnv lvl)
+    case solveRes of
+      Consistent solutionRecord -> do
+        record <- evalHOAS recordHOAS (pushEnvN solutionRecord)
+        return $ MVQuote record
+      Conflict -> return $ MVTrigger Unification
   MNeutral h spine -> return $ MNeutral h (MSSolve spine)
   _ -> throwError SolveOnNonDyn
 
@@ -276,4 +275,4 @@ instance Evaluatable MetaTerm where
       evaluateMForce val
     MSolve t -> do
       val <- evaluate t env
-      evaluateSolve val
+      evaluateSolve (envLevel env) val
