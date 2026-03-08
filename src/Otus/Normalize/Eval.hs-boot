@@ -1,6 +1,6 @@
 module Otus.Normalize.Eval (
   Evaluatable (..),
-  constraintAsRefl,
+  absRefl,
   evaluateNeutral,
   evaluateFirst,
   evaluateRest,
@@ -21,7 +21,7 @@ class (Show t) => Evaluatable t where
   makeCls :: t -> Environment -> HOAS (EvalRes t)
   makeCls t env = HOAS (\f -> evaluate t (f env))
 
-constraintAsRefl :: VConstraint -> Value
+absRefl :: Int -> Value
 evaluateNeutral :: Value -> Spine -> EvalResult Value
 evaluateFirst :: Value -> EvalResult Value
 evaluateRest :: Value -> EvalResult Value

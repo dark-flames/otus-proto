@@ -1,5 +1,5 @@
 module Otus.Normalize.Eval (
-  constraintAsRefl,
+  absRefl,
   evaluateApp,
   evaluateFirst,
   evaluateRest,
@@ -101,13 +101,15 @@ instance Evaluatable Record where
 instance Evaluatable Constraint where
   type EvalRes Constraint = VConstraint
 
-  evaluate (TmEq tele lhs rhs eqTy) env = do
-    vTeleSeq <- evaluate tele env >>= intoTeleSequence
-    let env' = liftObjEnvN (size tele) env
-    vEqTy <- evaluate eqTy env'
-    vLhs <- evaluate lhs env'
-    vRhs <- evaluate rhs env'
-    return $ VTmEq vTeleSeq vLhs vRhs vEqTy
+  evaluate constr env = case constr of
+    (TmEq tele lhs rhs eqTy) -> do
+      vTeleSeq <- evaluate tele env >>= intoTeleSequence
+      let env' = liftObjEnvN (size tele) env
+      vEqTy <- evaluate eqTy env'
+      vLhs <- evaluate lhs env'
+      vRhs <- evaluate rhs env'
+      return $ VTmEq vTeleSeq vLhs vRhs vEqTy
+    MetaDef ty -> VMetaDef <$> evaluate ty env
 
 instance Evaluatable Problem where
   type EvalRes Problem = VProblem
@@ -177,16 +179,10 @@ evaluateMBind prev curHOAS tyHOAS = case prev of
   MNeutral h spine -> return $ MNeutral h (MSBind spine curHOAS tyHOAS)
   _ -> throwError BindOnNonComputation
 
-evaluateMAbsMeta :: Value -> MetaValue -> EvalResult MetaValue
-evaluateMAbsMeta ty = \case
-  MVGuard tele problem record -> return $ MVGuard (VTeleSeq (ty :<| unVTele tele)) problem record
-  MNeutral h spine -> return $ MNeutral h (MSAbsMeta ty spine)
-  _ -> throwError AbsOnNonDyn
-
 evaluateMExt :: MetaValue -> Int -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
 evaluateMExt prev lift probHOAS recordHOAS = case prev of
-  MVGuard prevMeta prevProb prevRecordHOAS -> do
-    prevRecord <- evalHOAS prevRecordHOAS (liftObjEnvN (size prevMeta + size prevProb))
+  MVGuard prevProb prevRecordHOAS -> do
+    prevRecord <- evalHOAS prevRecordHOAS (liftObjEnvN (size prevProb))
     prob <- evalHOAS probHOAS (pushEnvN prevRecord)
     let record f =
           ( do
@@ -196,23 +192,19 @@ evaluateMExt prev lift probHOAS recordHOAS = case prev of
               let pushRecordWithProb e = e ||><| pr ||><| snd (splitEnv (size prob) (f e))
               evalHOAS recordHOAS pushRecordWithProb
           )
-    return $ MVGuard prevMeta (prevProb >< prob) (HOAS record)
+    return $ MVGuard (prevProb >< prob) (HOAS record)
   MNeutral h spine -> return $ MNeutral h (MSExt spine lift probHOAS recordHOAS)
   _ -> throwError AbsOnNonDyn
 
-constraintAsRefl :: VConstraint -> Value
-constraintAsRefl (VTmEq tele _ _ _) =
-  let l = size tele
-  in if l == 0 then
-       VRefl
-     else
-       VLam (makeCls (lamN (l - 1) Refl) emptyEnv)
+absRefl :: Int -> Value
+absRefl = \case
+  x | x > 0 -> VLam (makeCls (lamN (x - 1) Refl) emptyEnv)
+  _ -> VRefl
 
 evaluateSolve :: LevelId -> MetaValue -> EvalResult MetaValue
 evaluateSolve lvl = \case
-  MVGuard meta prob recordHOAS -> do
-    let metaSize = size meta
-    solveRes <- execUnifyMonad (solveProblem lvl metaSize prob) (emptyUnifyEnv lvl)
+  MVGuard prob recordHOAS -> do
+    solveRes <- execUnifyMonad (solveProblem lvl prob) (emptyUnifyEnv lvl)
     case solveRes of
       Consistent solutionRecord -> do
         record <- evalHOAS recordHOAS (pushEnvN solutionRecord)
@@ -241,14 +233,9 @@ instance Evaluatable MetaTerm where
     MDyn tele -> do
       vtele <- evaluate tele env
       return $ MVDyn vtele
-    MGuard meta prob record -> do
-      vMeta <- evaluate meta env >>= intoTeleSequence
-      vProblem <- evaluate prob (liftObjEnvN (size meta) env)
-      return $ MVGuard vMeta vProblem (makeCls record env)
-    MAbsMeta ty t -> do
-      vTy <- evaluate ty env
-      val <- evaluate t (liftObjEnv env)
-      evaluateMAbsMeta vTy val
+    MGuard prob record -> do
+      vProblem <- evaluate prob env
+      return $ MVGuard vProblem (makeCls record env)
     MExt prev lift prob record -> do
       vPrev <- evaluate prev env
       evaluateMExt vPrev lift (makeCls prob env) (makeCls record env)

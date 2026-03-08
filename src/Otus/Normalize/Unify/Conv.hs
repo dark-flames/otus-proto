@@ -47,6 +47,8 @@ instance ConvCheck VConstraint where
     conv l lTy rTy
     conv l lLhs rLhs
     conv l lRhs rRhs
+  conv lvl (VMetaDef lTy) (VMetaDef rTy) = conv lvl lTy rTy
+  conv _ _ _ = conflict
 
 instance ConvCheck VProblem where
   conv _ Empty Empty = return ()
@@ -136,15 +138,13 @@ instance ConvCheck MetaValue where
     (MVLift lTele, MVLift rTele) -> conv lvl lTele rTele
     (MVQuote lList, MVQuote rList) -> conv lvl lList rList
     (MVDyn lTele, MVDyn rTele) -> conv lvl lTele rTele
-    (MVGuard lMeta lProblem lRecordHOAS, MVGuard rMeta rProblem rRecordHOAS) -> do
-      let metaSize = size lMeta
+    (MVGuard lProblem lRecordHOAS, MVGuard rProblem rRecordHOAS) -> do
       let problemSize = size lProblem
-      conv lvl lMeta rMeta
-      conv (shift metaSize lvl) lProblem rProblem
-      let pushLvls = liftObjEnvN (metaSize + problemSize)
+      conv lvl lProblem rProblem
+      let pushLvls = liftObjEnvN problemSize
       lRecord <- liftEval $ evalHOAS lRecordHOAS pushLvls
       rRecord <- liftEval $ evalHOAS rRecordHOAS pushLvls
-      conv (shift (metaSize + problemSize) lvl) lRecord rRecord
+      conv (shift problemSize lvl) lRecord rRecord
     -- computation
     (MVPi lDom le lHOAS, MVPi rDom re rHOAS) -> do
       conv lvl lDom rDom

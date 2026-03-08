@@ -121,6 +121,7 @@ type VProblem = Seq VConstraint
 
 data VConstraint
   = VTmEq VTeleSequence Value Value Value
+  | VMetaDef Value
 
 data Spine
   = SNil
@@ -149,7 +150,6 @@ data MetaSpine
   | MSApp MetaSpine MetaValue
   | MSForce MetaSpine
   | MSBind MetaSpine MetaHOAS MetaHOAS
-  | MSAbsMeta Value MetaSpine
   | MSExt MetaSpine Int ProblemHOAS RecordHOAS
   | MSSolve MetaSpine
 
@@ -169,7 +169,7 @@ data MetaValue
   | MVLift VTelescope
   | MVQuote VRecord
   | MVDyn VTelescope
-  | MVGuard VTeleSequence VProblem RecordHOAS
+  | MVGuard VProblem RecordHOAS
 
 instance Sized Environment where
   size = size . unEnv

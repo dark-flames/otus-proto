@@ -5,8 +5,8 @@ module Otus.Normalize.Unify.State (
   isMetaEntry,
   isLocalEntry,
   setEntry,
-  setProblemLvl,
-  incrProblemLvl,
+  setMaskLvl,
+  incrMaskLvl,
   readSolveResultRecord,
   UnifyResult (..),
   UnifyMonad,
@@ -37,14 +37,14 @@ import Otus.Normalize.Value
 
 data Entry
   = EnvVar
-  | MetaVar (Maybe Value)
+  | MetaVar (Maybe (Value, Term))
   | ConstraintProof (Maybe Value)
   | LocalVar
 
 data UnifyEnv = UnifyEnv
   { baseLvl :: LevelId,
     entries :: Seq Entry,
-    problemLvl :: LevelId
+    maskLvl :: LevelId
   }
 
 findEntry :: LevelId -> UnifyMonad Entry
@@ -53,7 +53,7 @@ findEntry lvl = do
   if lvl < baseLvl uEnv then
     return EnvVar
   else
-    if lvl < problemLvl uEnv then case entries uEnv @? sub lvl (baseLvl uEnv) of
+    if lvl < maskLvl uEnv then case entries uEnv @? sub lvl (baseLvl uEnv) of
       Just e -> return e
       Nothing -> throwError $ Anyhow "impossible"
     else
@@ -67,7 +67,7 @@ setEntry lvl entry = do
   else do
     let idx = sub lvl (baseLvl uEnv)
     let newEntries = Seq.update idx entry (entries uEnv)
-    put (UnifyEnv (baseLvl uEnv) newEntries (problemLvl uEnv))
+    put (UnifyEnv (baseLvl uEnv) newEntries (maskLvl uEnv))
 
 isMetaEntry :: LevelId -> UnifyMonad Bool
 isMetaEntry lvl =
@@ -81,20 +81,29 @@ isLocalEntry lvl =
     LocalVar -> return True
     _ -> return False
 
-setProblemLvl :: LevelId -> UnifyMonad ()
-setProblemLvl lvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) lvl)
+setMaskLvl :: LevelId -> UnifyMonad ()
+setMaskLvl lvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) lvl)
 
-incrProblemLvl :: UnifyMonad ()
-incrProblemLvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) (incrLvl $ problemLvl e))
+incrMaskLvl :: UnifyMonad ()
+incrMaskLvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) (incrLvl $ maskLvl e))
 
 readSolveResultRecord :: UnifyMonad VRecord
 readSolveResultRecord = do
   uEnv <- get
-  let toValue = \case
-        MetaVar (Just v) -> return v
-        ConstraintProof (Just v) -> return v
+  let e = trivalEnv (baseLvl uEnv)
+  go e (entries uEnv)
+  where
+    go env = \case
+      Empty -> return Empty
+      entry :<| rst -> case entry of
+        MetaVar (Just (_, tm)) -> do
+          v <- liftEval $ evaluateTerm tm env
+          vRst <- go (pushEnv v env) rst
+          return $ v :<| vRst
+        ConstraintProof (Just v) -> do
+          vRst <- go (pushEnv v env) rst
+          return $ v :<| vRst
         _ -> conflict
-  traverse toValue (entries uEnv)
 
 -- Control
 data UnifyResult r
@@ -119,10 +128,13 @@ type UnifyMonad = StateT UnifyEnv (EvalResultT UnifyResult)
 emptyUnifyEnv :: LevelId -> UnifyEnv
 emptyUnifyEnv lvl = UnifyEnv lvl Empty lvl
 
-initUnifyEnv :: LevelId -> Int -> Int -> UnifyMonad ()
-initUnifyEnv lvl metaSize problemSize = put $ UnifyEnv lvl envEntries lvl
+initUnifyEnv :: LevelId -> VProblem -> UnifyMonad ()
+initUnifyEnv lvl prob = put $ UnifyEnv lvl envEntries lvl
   where
-    envEntries = Seq.replicate metaSize (MetaVar Nothing) >< Seq.replicate problemSize (ConstraintProof Nothing)
+    constrToEntry = \case
+      VTmEq {} -> ConstraintProof Nothing
+      VMetaDef _ -> MetaVar Nothing
+    envEntries = fmap constrToEntry prob
 
 runUnifyMonad :: UnifyMonad a -> UnifyEnv -> EvalResult (UnifyResult (a, UnifyEnv))
 runUnifyMonad m env =
@@ -167,7 +179,7 @@ force = \case
   Neutral (NVar lvl) spine -> do
     entry <- findEntry lvl
     case entry of
-      MetaVar (Just solution) -> liftEval $ evaluateNeutral solution spine
+      MetaVar (Just (solution, _)) -> liftEval $ evaluateNeutral solution spine
       ConstraintProof (Just eqRefl) -> liftEval $ evaluateNeutral eqRefl spine
       _ -> return $ Neutral (NVar lvl) spine
   val -> return val

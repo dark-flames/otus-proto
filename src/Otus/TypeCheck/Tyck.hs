@@ -65,16 +65,20 @@ checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
         throwError $ CannotCheckRecord (RecordSeq preRecord) teleTm
 
 checkConstraint :: Context -> Constraint -> TypeCheckResult (Constraint, Type)
-checkConstraint ctx (TmEq preTele preLhs preRhs preTy) = do
-  (tele, _) <- inferTelescope ctx preTele
-  vTele <- doEvalVTeleSeq ctx tele
-  let ctx' = pushVTeleSeq vTele ctx
-  (tyTm, ty, _) <- inferTy' ctx' preTy
-  lhs <- tmOf <$> check ctx preLhs ty
-  rhs <- tmOf <$> check ctx preRhs ty
-  let eqTyTm = piTele tele (Id (tmOf tyTm) lhs rhs)
-  eqTy <- doEval ctx eqTyTm
-  return (TmEq tele lhs rhs (tmOf tyTm), eqTy)
+checkConstraint ctx = \case
+  TmEq preTele preLhs preRhs preTy -> do
+    (tele, _) <- inferTelescope ctx preTele
+    vTele <- doEvalVTeleSeq ctx tele
+    let ctx' = pushVTeleSeq vTele ctx
+    (tyTm, ty, _) <- inferTy' ctx' preTy
+    lhs <- tmOf <$> check ctx preLhs ty
+    rhs <- tmOf <$> check ctx preRhs ty
+    let eqTyTm = piTele tele (Id (tmOf tyTm) lhs rhs)
+    eqTy <- doEval ctx eqTyTm
+    return (TmEq tele lhs rhs (tmOf tyTm), eqTy)
+  MetaDef preTy -> do
+    (tyTm, ty, _) <- inferTy' ctx preTy
+    return (MetaDef (tmOf tyTm), ty)
 
 checkProblem :: Context -> Problem -> TypeCheckResult (Problem, VTeleSequence)
 checkProblem c p = mapSnd VTeleSeq <$> go c p
@@ -307,19 +311,6 @@ instance TypeCheck MetaTerm where
       (teleTm, l) <- inferTelescope ctx tele
       vTele <- doEval ctx teleTm
       return $ wfMetaValue (MVType l) (MVDyn vTele)
-    MAbsMeta preTy preTm -> do
-      (tyTm, ty, _) <- inferTy' ctx preTy
-      let ctx' = ctx |:> ty
-      tm <- infer ctx' preTm
-      case tyOf tm of
-        MVDyn innerTele -> do
-          innerTeleTm <- unTele <$> doQuote ctx' innerTele -- todo: workaround, refactor infer to return tyTm at the same time
-          let teleTm = TeleSeq (tmOf tyTm <| innerTeleTm)
-          tele <- doEval ctx teleTm
-          return $ wfMetaValue (MAbsMeta (tmOf tyTm) (tmOf tm)) (MVDyn tele)
-        innerTy -> do
-          innerTyTm <- doQuote ctx' innerTy
-          throwError $ ExpectedDynamicType preTm innerTyTm
     ---- Computation
     MPi dom eff cod -> do
       -- Γ |- Dom vtype @ domL
@@ -466,14 +457,11 @@ instance TypeCheck MetaTerm where
     (MQuote preRecord, MVLift vTele) -> do
       record <- checkRecord ctx preRecord vTele
       return $ wfMetaValue (MQuote record) (MVLift vTele)
-    (MGuard preMeta preProblem preRecord, MVDyn vTele) -> do
-      (metaTele, _) <- inferTelescope ctx preMeta
-      vMetaTele <- doEvalVTeleSeq ctx metaTele
-      let problemCtx = pushVTeleSeq vMetaTele ctx
-      (problem, problemTele) <- checkProblem problemCtx preProblem
-      let recordCtx = pushVTeleSeq problemTele problemCtx
+    (MGuard preProblem preRecord, MVDyn vTele) -> do
+      (problem, problemTele) <- checkProblem ctx preProblem
+      let recordCtx = pushVTeleSeq problemTele ctx
       record <- checkRecord recordCtx preRecord vTele
-      return $ wfMetaValue (MGuard metaTele problem record) (MVDyn vTele)
+      return $ wfMetaValue (MGuard problem record) (MVDyn vTele)
     (MExt prePrev lift preProblem preRecord, MVDyn vTele) -> do
       prev <- infer ctx prePrev
       case tyOf prev of

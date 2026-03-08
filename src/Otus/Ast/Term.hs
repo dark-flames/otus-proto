@@ -34,6 +34,7 @@ type Problem = Seq Constraint
 
 data Constraint
   = TmEq Telescope Term Term Term
+  | MetaDef Term
   deriving (Eq, Show)
 
 type OptionalTy = Maybe Term
@@ -74,8 +75,7 @@ data MetaTerm
     MLift Telescope
   | MQuote Record
   | MDyn Telescope
-  | MGuard Telescope Problem Record
-  | MAbsMeta Term MetaTerm
+  | MGuard Problem Record
   | MExt MetaTerm Int Problem Record
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm

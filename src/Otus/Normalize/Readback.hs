@@ -60,6 +60,7 @@ instance Quotable VConstraint where
       rhsTm <- quote eqLvl rhs
       tyTm <- quote eqLvl ty
       return $ TmEq tele lhsTm rhsTm tyTm
+    VMetaDef ty -> MetaDef <$> quote lvl ty
 
 instance Quotable VProblem where
   type QuoteRes VProblem = Problem
@@ -123,10 +124,6 @@ quoteMSpine lvl stuck = \case
     bTm <- quote lvl bHOAS
     bindTyTm <- quote lvl tyHOAS
     return $ MLetIn prevTm bTm bindTyTm
-  MSAbsMeta ty spine -> do
-    tyTm <- quote lvl ty
-    sTm <- quoteMSpine (incrLvl lvl) stuck spine
-    return $ MAbsMeta tyTm sTm
   MSExt spine lift problemHOAS recordHOAS -> do
     sTm <- quoteMSpine lvl stuck spine
     problem <- evalHOAS problemHOAS (liftObjEnvN lift)
@@ -155,9 +152,8 @@ instance Quotable MetaValue where
     MVLift t -> MLift <$> quote lvl t
     MVQuote l -> MQuote <$> quote lvl l
     MVDyn t -> MDyn <$> quote lvl t
-    MVGuard teleSeq prob recordHOAS -> do
-      tele <- quote lvl teleSeq
-      probTm <- quote (shift (size tele) lvl) prob
-      record <- evalHOAS recordHOAS (liftObjEnvN (size tele + size prob))
-      recordTm <- quote (shift (size tele + size prob) lvl) record
-      return $ MGuard tele probTm recordTm
+    MVGuard prob recordHOAS -> do
+      probTm <- quote lvl prob
+      record <- evalHOAS recordHOAS (liftObjEnvN (size prob))
+      recordTm <- quote (shift (size prob) lvl) record
+      return $ MGuard probTm recordTm

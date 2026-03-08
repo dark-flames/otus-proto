@@ -69,22 +69,24 @@ buildEquationSet lvl problem =
   let eqGroups = buildGroups lvl problem
   in EqSet lvl eqGroups
   where
-    buildEquationGroup pLvl c@(VTmEq localTele lhs rhs _) =
-      let localLvl = shift (size localTele) pLvl
-      in EqGroup
-           { groupLvl = pLvl,
-             equations = singleton (Equation localLvl lhs rhs mempty),
-             eqProof = constraintAsRefl c
-           }
+    buildGroup pLvl = \case
+      VTmEq localTele lhs rhs _ ->
+        let localLvl = shift (size localTele) pLvl
+        in Just $
+             EqGroup
+               { groupLvl = pLvl,
+                 equations = singleton (Equation localLvl lhs rhs mempty),
+                 eqProof = absRefl (size localTele)
+               }
+      _ -> Nothing
 
     buildGroups pLvl = \case
       Empty -> Empty
       c :<| rest ->
-        let
-          group = buildEquationGroup pLvl c
-          restEqs = buildGroups (incrLvl pLvl) rest
-        in
-          group <| restEqs
+        let restEqs = buildGroups (incrLvl pLvl) rest
+        in case buildGroup pLvl c of
+             Just group -> group <| restEqs
+             _ -> restEqs
 
 -- | Solve one equation group:
 -- | unify all equations, keep postponed ones, and update the group's proof when fully solved.
@@ -92,7 +94,7 @@ buildEquationSet lvl problem =
 solveGroup :: EquationGroup -> UnifyMonad (Bool, EquationGroup, LevelSet)
 solveGroup group = do
   let gLvl = groupLvl group
-  setProblemLvl gLvl
+  setMaskLvl gLvl
 
   (leftEqs, solved) <- foldlM step (Empty, mempty) (equations group)
   let
@@ -131,11 +133,10 @@ solveCycle = go
         else
           go nextEqSet
 
-solveProblem :: LevelId -> Int -> VProblem -> UnifyMonad VRecord
-solveProblem lvl metaSize problem = do
-  initUnifyEnv lvl metaSize (size problem)
-  let pLvl = shift metaSize lvl
-  let eqSet = buildEquationSet pLvl problem
+solveProblem :: LevelId -> VProblem -> UnifyMonad VRecord
+solveProblem lvl problem = do
+  initUnifyEnv lvl problem
+  let eqSet = buildEquationSet lvl problem
   solveCycle eqSet
   readSolveResultRecord
 
@@ -222,7 +223,11 @@ rename m = go
                   goSpine pren (Var $ toIndex (prDom pren) l) sp
                 else
                   return Nothing
-              ConstraintProof _ -> return Nothing
+              ConstraintProof _ ->
+                if l < m then
+                  goSpine pren (Var $ toIndex (prDom pren) l) sp
+                else
+                  return Nothing
               LocalVar -> case IM.lookup (unLevel l) (prRen pren) of
                 Nothing -> return Nothing
                 Just l' -> goSpine pren (Var $ toIndex (prDom pren) l') sp
@@ -257,7 +262,7 @@ solveMetaEntry lvl metaId sp rhs =
         Just rhsTm -> do
           let solutionTm = lamN spSize rhsTm
           solution <- liftEval $ evaluateTerm solutionTm (trivalEnv lvl)
-          setEntry metaId (MetaVar (Just solution))
+          setEntry metaId (MetaVar (Just (solution, solutionTm)))
           return $ SolveResult mempty (Set.singleton metaId)
         _ -> postponeEquation
     _ -> postponeEquation
