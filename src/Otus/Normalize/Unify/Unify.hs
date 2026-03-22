@@ -160,13 +160,13 @@ invert cod sp =
   where
     go :: Spine -> UnifyMonad (Maybe (LevelId, IM.IntMap LevelId, Int))
     go = \case
-      SNil -> return $ Just (0, mempty, 0)
-      SApp sp' param ->
+      SPNil -> return $ Just (0, mempty, 0)
+      SPApp sp' param ->
         go sp' >>= \case
           Just (dom, ren, s) -> do
             param' <- force param
             case param' of
-              Neutral (NVar l@(LevelId x)) SNil ->
+              Neutral (NVar l@(LevelId x)) SPNil ->
                 findEntry l >>= \case
                   LocalVar ->
                     if IM.notMember x ren then
@@ -183,15 +183,15 @@ rename m = go
   where
     goSpine :: PartialRenaming -> Term -> Spine -> UnifyMonad (Maybe Term)
     goSpine pren h = \case
-      SNil -> return $ Just h
-      SApp s a -> do
+      SPNil -> return $ Just h
+      SPApp s a -> do
         ma <- go pren a
         case ma of
           Just a' -> goSpine pren (App h a') s
           Nothing -> return Nothing
-      SFirst s -> goSpine pren (First h) s
-      SRest s -> goSpine pren (Rest h) s
-      SJ fam p s -> do
+      SPFirst s -> goSpine pren (First h) s
+      SPRest s -> goSpine pren (Rest h) s
+      SPJ fam p s -> do
         mfam <- go pren fam
         mp <- go pren p
         case (mfam, mp) of
@@ -314,14 +314,14 @@ unifyRecord lvl lhs rhs = case (lhs, rhs) of
 
 unifySpine :: LevelId -> Spine -> Spine -> UnifyMonad SolveResult
 unifySpine lvl lhs rhs = case (lhs, rhs) of
-  (SNil, SNil) -> return mempty
-  (SApp lsp l, SApp rsp r) -> do
+  (SPNil, SPNil) -> return mempty
+  (SPApp lsp l, SPApp rsp r) -> do
     sRes <- unifySpine lvl lsp rsp
     pRes <- unifyTm lvl l r
     return $ sRes <> pRes
-  (SFirst lsp, SFirst rsp) -> unifySpine lvl lsp rsp
-  (SRest lsp, SRest rsp) -> unifySpine lvl lsp rsp
-  (SJ lFam lp lsp, SJ rFam rp rsp) -> do
+  (SPFirst lsp, SPFirst rsp) -> unifySpine lvl lsp rsp
+  (SPRest lsp, SPRest rsp) -> unifySpine lvl lsp rsp
+  (SPJ lFam lp lsp, SPJ rFam rp rsp) -> do
     famRes <- unifyTm (shift 2 lvl) lFam rFam
     pRes <- unifyTm lvl lp rp
     sRes <- unifySpine lvl lsp rsp

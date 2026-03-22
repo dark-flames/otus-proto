@@ -12,6 +12,7 @@ description:         prototype of Otus project
 dependencies:
 - base >= 4.20.2.0 && < 4.21.0.0
 - mtl >= 2.3.2 && < 3
+- transformers >= 0.6.3.0 && < 0.7
 - containers >= 0.8 && < 1
 
 ghc-options:
@@ -40,6 +41,7 @@ default-extensions:
 - DuplicateRecordFields
 - DisambiguateRecordFields
 - TypeApplications
+- InstanceSigs
 
 library:
   source-dirs: src

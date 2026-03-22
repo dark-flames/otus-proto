@@ -124,11 +124,11 @@ data VConstraint
   | VMetaDef Value
 
 data Spine
-  = SNil
-  | SApp Spine Value
-  | SFirst Spine
-  | SRest Spine
-  | SJ Value Value Spine
+  = SPNil
+  | SPApp Spine Value
+  | SPFirst Spine
+  | SPRest Spine
+  | SPJ Value Value Spine
 
 data Stuck
   = NVar LevelId
@@ -146,8 +146,8 @@ data Value
 
 -- Meta
 data MetaSpine
-  = MSNil
-  | MSApp MetaSpine MetaValue
+  = MSPNil
+  | MSPApp MetaSpine MetaValue
   | MSForce MetaSpine
   | MSBind MetaSpine MetaHOAS MetaHOAS
   | MSExt MetaSpine Int ProblemHOAS RecordHOAS
@@ -184,7 +184,7 @@ instance Sized VTeleSequence where
 instance Domain Value where
   type Syntax Value = Term
 
-  domVar lvl = Neutral (NVar lvl) SNil
+  domVar lvl = Neutral (NVar lvl) SPNil
 
 instance EnvVal Value where
   intoItem = ObjVal
@@ -192,7 +192,7 @@ instance EnvVal Value where
 instance Domain MetaValue where
   type Syntax MetaValue = MetaTerm
 
-  domVar lvl = MNeutral lvl MSNil
+  domVar lvl = MNeutral lvl MSPNil
 
 instance EnvVal MetaValue where
   intoItem = MetaVal
@@ -201,10 +201,10 @@ instance EnvVal EnvItem where
   intoItem = id
 
 vvar :: LevelId -> Value
-vvar lvl = Neutral (NVar lvl) SNil
+vvar lvl = Neutral (NVar lvl) SPNil
 
 mvvar :: LevelId -> MetaValue
-mvvar lvl = MNeutral lvl MSNil
+mvvar lvl = MNeutral lvl MSPNil
 
 emptyEnv :: Environment
 emptyEnv = Env mempty

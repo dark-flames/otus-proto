@@ -1,5 +1,3 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Otus.Common.Result (
   Result (..),
   ResultT (..),

@@ -5,6 +5,7 @@ module Otus.Ast.Id (
   incrLvl,
   toLevel,
   toIndex,
+  Name (..),
 ) where
 
 import Otus.Common
@@ -38,3 +39,6 @@ incrLvl = shift 1
 
 toIndex :: (Sized l) => l -> LevelId -> IndexId
 toIndex l lvl = IndexId $ intoRightIndex l lvl
+
+newtype Name = StringName String
+  deriving (Eq, Ord, Show) via String

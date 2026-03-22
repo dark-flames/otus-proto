@@ -59,19 +59,19 @@ instance ConvCheck VProblem where
 
 instance ConvCheck Spine where
   conv lvl lhs rhs = case (lhs, rhs) of
-    (SNil, SNil) -> return ()
-    (SApp lh lp, SApp rh rp) -> do
+    (SPNil, SPNil) -> return ()
+    (SPApp lh lp, SPApp rh rp) -> do
       conv lvl lp rp
       conv lvl lh rh
-    (SFirst lh, SFirst rh) -> conv lvl lh rh
-    (SRest lh, SRest rh) -> conv lvl lh rh
+    (SPFirst lh, SPFirst rh) -> conv lvl lh rh
+    (SPRest lh, SPRest rh) -> conv lvl lh rh
     _ -> conflict
 
 instance ConvCheck MetaSpine where
   conv :: LevelId -> MetaSpine -> MetaSpine -> UnifyMonad ()
   conv lvl lhs rhs = case (lhs, rhs) of
-    (MSNil, MSNil) -> return ()
-    (MSApp lh lp, MSApp rh rp) -> do
+    (MSPNil, MSPNil) -> return ()
+    (MSPApp lh lp, MSPApp rh rp) -> do
       conv lvl lp rp
       conv lvl lh rh
     (MSForce lh, MSForce rh) -> conv lvl lh rh

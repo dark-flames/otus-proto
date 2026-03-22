@@ -42,44 +42,44 @@ intoTeleSequence t = VTeleSeq <$> go t
 evaluateApp :: Value -> Value -> EvalResult Value
 evaluateApp vFn vParam = case vFn of
   VLam bodyHOAS -> evalHOAS bodyHOAS (pushEnv vParam)
-  Neutral h spine -> return $ Neutral h (SApp spine vParam)
+  Neutral h spine -> return $ Neutral h (SPApp spine vParam)
   _ -> throwError AppOnNonLambda
 
 evaluateFirst :: Value -> EvalResult Value
 evaluateFirst = \case
   VList (val :<| _) -> return val
   VList _ -> throwError ProjOnEmptyRecord
-  Neutral h spine -> return $ Neutral h (SFirst spine)
+  Neutral h spine -> return $ Neutral h (SPFirst spine)
   _ -> throwError ProjOnNonRecord
 
 evaluateRest :: Value -> EvalResult Value
 evaluateRest = \case
   VList (_ :<| rest) -> return $ VList rest
   VList _ -> throwError ProjOnEmptyRecord
-  Neutral h spine -> return $ Neutral h (SRest spine)
+  Neutral h spine -> return $ Neutral h (SPRest spine)
   _ -> throwError ProjOnNonRecord
 
 evaluateJ :: Value -> Value -> Value -> EvalResult Value
 evaluateJ fam p = \case
   VRefl -> return p
-  Neutral h spine -> return $ Neutral h (SJ fam p spine)
+  Neutral h spine -> return $ Neutral h (SPJ fam p spine)
   _ -> throwError JOnNonId
 
 evaluateSplicing :: MetaValue -> EvalResult Value
 evaluateSplicing = \case
   MVQuote vRecord -> return $ VList vRecord
-  MNeutral var MSNil -> return $ Neutral (NSplicing var) SNil
+  MNeutral var MSPNil -> return $ Neutral (NSplicing var) SPNil
   _ -> throwError SplicingNonMeta
 
 evaluateNeutral :: Value -> Spine -> EvalResult Value
 evaluateNeutral val = \case
-  SNil -> return val
-  SApp spine p -> do
+  SPNil -> return val
+  SPApp spine p -> do
     f <- evaluateNeutral val spine
     evaluateApp f p
-  SFirst spine -> evaluateNeutral val spine >>= evaluateFirst
-  SRest spine -> evaluateNeutral val spine >>= evaluateRest
-  SJ fam p spine -> evaluateNeutral val spine >>= evaluateJ fam p
+  SPFirst spine -> evaluateNeutral val spine >>= evaluateFirst
+  SPRest spine -> evaluateNeutral val spine >>= evaluateRest
+  SPJ fam p spine -> evaluateNeutral val spine >>= evaluateJ fam p
 
 evaluateTerm :: Term -> Environment -> EvalResult Value
 evaluateTerm = evaluate
@@ -169,7 +169,7 @@ evaluateMApp :: MetaValue -> MetaValue -> EvalResult MetaValue
 evaluateMApp vFn vParam = case vFn of
   MVLam bodyHOAS -> evalHOAS bodyHOAS (pushEnv vParam)
   MVTrigger e -> return $ MVTrigger e
-  MNeutral h spine -> return $ MNeutral h (MSApp spine vParam)
+  MNeutral h spine -> return $ MNeutral h (MSPApp spine vParam)
   _ -> throwError AppOnNonLambda
 
 evaluateMBind :: MetaValue -> MetaHOAS -> MetaHOAS -> EvalResult MetaValue

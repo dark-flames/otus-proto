@@ -68,14 +68,14 @@ instance Quotable VProblem where
 
 quoteSpine :: LevelId -> Term -> Spine -> EvalResult Term
 quoteSpine lvl stuck = \case
-  SNil -> return stuck
-  SApp s p -> do
+  SPNil -> return stuck
+  SPApp s p -> do
     sTm <- quoteSpine lvl stuck s
     pTm <- quote lvl p
     return $ App sTm pTm
-  SFirst s -> First <$> quoteSpine lvl stuck s
-  SRest s -> Rest <$> quoteSpine lvl stuck s
-  SJ fam p s -> do
+  SPFirst s -> First <$> quoteSpine lvl stuck s
+  SPRest s -> Rest <$> quoteSpine lvl stuck s
+  SPJ fam p s -> do
     famTm <- quote (incrLvl $ incrLvl lvl) fam
     pTm <- quote lvl p
     sTm <- quoteSpine lvl stuck s
@@ -113,8 +113,8 @@ instance Quotable MetaHOAS where
 
 quoteMSpine :: LevelId -> MetaTerm -> MetaSpine -> EvalResult MetaTerm
 quoteMSpine lvl stuck = \case
-  MSNil -> return stuck
-  MSApp s p -> do
+  MSPNil -> return stuck
+  MSPApp s p -> do
     sTm <- quoteMSpine lvl stuck s
     pTm <- quote lvl p
     return $ MApp sTm pTm

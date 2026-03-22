@@ -20,6 +20,7 @@ library
       Otus.Ast
       Otus.Ast.Effect
       Otus.Ast.Id
+      Otus.Ast.PreSyntax
       Otus.Ast.Term
       Otus.Common
       Otus.Common.Algebra
@@ -27,6 +28,10 @@ library
       Otus.Common.Result
       Otus.Common.Seq
       Otus.Common.Utils
+      Otus.Elaboration.Context
+      Otus.Elaboration.Control
+      Otus.Elaboration.Elab
+      Otus.Elaboration.Judgement
       Otus.Normalize
       Otus.Normalize.Control
       Otus.Normalize.Error
@@ -62,11 +67,13 @@ library
       DuplicateRecordFields
       DisambiguateRecordFields
       TypeApplications
+      InstanceSigs
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       base >=4.20.2.0 && <4.21.0.0
     , containers >=0.8 && <1
     , mtl >=2.3.2 && <3
+    , transformers >=0.6.3.0 && <0.7
   default-language: Haskell2010
 
 test-suite tests
@@ -94,6 +101,7 @@ test-suite tests
       DuplicateRecordFields
       DisambiguateRecordFields
       TypeApplications
+      InstanceSigs
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wredundant-constraints
   build-depends:
       HUnit
@@ -101,4 +109,5 @@ test-suite tests
     , containers >=0.8 && <1
     , mtl >=2.3.2 && <3
     , otus-proto
+    , transformers >=0.6.3.0 && <0.7
   default-language: Haskell2010
