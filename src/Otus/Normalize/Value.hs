@@ -42,6 +42,7 @@ import Otus.Normalize.Error
 data EnvItem
   = MetaVal MetaValue
   | ObjVal Value
+  | AmbiguousLevel LevelId
 
 newtype Environment = Env
   { unEnv :: Seq EnvItem
@@ -210,12 +211,7 @@ emptyEnv :: Environment
 emptyEnv = Env mempty
 
 trivalEnv :: LevelId -> Environment
-trivalEnv (LevelId s) =
-  let
-    vs :: Seq Value
-    vs = varSeq [0 .. s]
-  in
-    emptyEnv ||><| vs
+trivalEnv (LevelId s) = Env (fromList $ map (AmbiguousLevel . LevelId) [0 .. s])
 
 varSeq :: (Domain v) => [Int] -> Seq v
 varSeq = fromList . map (domVar . LevelId)
