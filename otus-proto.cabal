@@ -37,6 +37,7 @@ library
       Otus.Normalize.Error
       Otus.Normalize.Eval
       Otus.Normalize.Readback
+      Otus.Normalize.Subst
       Otus.Normalize.Unify
       Otus.Normalize.Unify.Conv
       Otus.Normalize.Unify.State
