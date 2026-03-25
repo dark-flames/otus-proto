@@ -141,7 +141,7 @@ instance ConvCheck MetaValue where
     (MVGuard lProblem lRecordHOAS, MVGuard rProblem rRecordHOAS) -> do
       let problemSize = size lProblem
       conv lvl lProblem rProblem
-      let pushLvls = liftObjEnvN problemSize
+      let pushLvls = liftEnvN problemSize
       lRecord <- liftEval $ evalHOAS lRecordHOAS pushLvls
       rRecord <- liftEval $ evalHOAS rRecordHOAS pushLvls
       conv (shift problemSize lvl) lRecord rRecord

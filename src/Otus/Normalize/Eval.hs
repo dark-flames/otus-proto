@@ -35,7 +35,7 @@ intoTeleSequence t = VTeleSeq <$> go t
   where
     go VTNil = return Empty
     go (VTCons ty rstHOAS) = do
-      rst <- evalHOAS rstHOAS liftObjEnv
+      rst <- evalHOAS rstHOAS liftEnv
       rstSeq <- go rst
       return $ ty :<| rstSeq
 
@@ -104,7 +104,7 @@ instance Evaluatable Constraint where
   evaluate constr env = case constr of
     (TmEq tele lhs rhs eqTy) -> do
       vTeleSeq <- evaluate tele env >>= intoTeleSequence
-      let env' = liftObjEnvN (size tele) env
+      let env' = liftEnvN (size tele) env
       vEqTy <- evaluate eqTy env'
       vLhs <- evaluate lhs env'
       vRhs <- evaluate rhs env'
@@ -118,7 +118,7 @@ instance Evaluatable Problem where
     Empty -> return Empty
     c :<| prob -> do
       vC <- evaluate c env
-      vProb <- evaluate prob (liftObjEnv env)
+      vProb <- evaluate prob (liftEnv env)
       return $ vC :<| vProb
 
 instance Evaluatable Term where
@@ -129,6 +129,7 @@ instance Evaluatable Term where
       Nothing -> throwError $ UnboundIndex idx
       Just (MetaVal _) -> throwError $ InvalidMetaVar idx
       Just (ObjVal val) -> return val
+      Just (AmbiguousLevel lvl) -> return $ vvar lvl
     TyAnnotation t _ -> evaluate t env
     Pi dom cod -> do
       vDom <- evaluate dom env
@@ -149,7 +150,7 @@ instance Evaluatable Term where
       return $ VId vTy vL vR
     Refl -> return VRefl
     J fam p e -> do
-      vFam <- evaluate fam (liftObjEnvN 2 env)
+      vFam <- evaluate fam (liftEnvN 2 env)
       vP <- evaluate p env
       vE <- evaluate e env
       evaluateJ vFam vP vE
@@ -179,18 +180,22 @@ evaluateMBind prev curHOAS tyHOAS = case prev of
   MNeutral h spine -> return $ MNeutral h (MSBind spine curHOAS tyHOAS)
   _ -> throwError BindOnNonComputation
 
+--
+
 evaluateMExt :: MetaValue -> Int -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
 evaluateMExt prev lift probHOAS recordHOAS = case prev of
   MVGuard prevProb prevRecordHOAS -> do
-    prevRecord <- evalHOAS prevRecordHOAS (liftObjEnvN (size prevProb))
+    prevRecord <- evalHOAS prevRecordHOAS (liftEnvN (size prevProb))
     prob <- evalHOAS probHOAS (pushEnvN prevRecord)
-    let record f =
+    let record pushAllProblem =
           ( do
+              let pushPrevProblem = fst . splitEnv (size prob) . pushAllProblem
+              let pushProblem e = e ||><| snd (splitEnv (size prob) (pushAllProblem e))
               -- get the value of prevMeta and prevProb, and then evaluate prevRecord
-              pr <- evalHOAS prevRecordHOAS (fst . splitEnv (size prob) . f)
+              pushPrevRecord <- pushEnvN <$> evalHOAS prevRecordHOAS pushPrevProblem
               -- push prevRecord and prob
-              let pushRecordWithProb e = e ||><| pr ||><| snd (splitEnv (size prob) (f e))
-              evalHOAS recordHOAS pushRecordWithProb
+              let pushPrevRecordWithProb = pushProblem . pushPrevRecord
+              evalHOAS recordHOAS pushPrevRecordWithProb
           )
     return $ MVGuard (prevProb >< prob) (HOAS record)
   MNeutral h spine -> return $ MNeutral h (MSExt spine lift probHOAS recordHOAS)
@@ -222,6 +227,7 @@ instance Evaluatable MetaTerm where
       Nothing -> throwError $ UnboundIndex idx
       Just (ObjVal _) -> throwError $ InvalidObjVar idx
       Just (MetaVal val) -> return val
+      Just (AmbiguousLevel lvl) -> return $ mvvar lvl
     MTyAnnotation t _ -> evaluate t env
     MU effs ty -> do
       vTy <- evaluate ty env

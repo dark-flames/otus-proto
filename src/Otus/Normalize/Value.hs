@@ -3,10 +3,8 @@ module Otus.Normalize.Value (
   Domain (..),
   EnvVal (..),
   Environment (..),
-  liftObjEnv,
-  liftObjEnvN,
-  liftMetaEnv,
-  liftMetaEnvN,
+  liftEnv,
+  liftEnvN,
   envLevel,
   splitEnv,
   HOAS (..),
@@ -51,23 +49,14 @@ newtype Environment = Env
 envLevel :: Environment -> LevelId
 envLevel = LevelId . size
 
-liftObjEnv :: Environment -> Environment
-liftObjEnv = liftObjEnvN 1
+liftEnv :: Environment -> Environment
+liftEnv = liftEnvN 1
 
-liftObjEnvN :: Int -> Environment -> Environment
-liftObjEnvN n env = env ||><| fmap f (fromList [s .. s + n])
+liftEnvN :: Int -> Environment -> Environment
+liftEnvN n env = env ||><| fmap f (fromList [s .. s + n])
   where
     s = size env
-    f = vvar . LevelId
-
-liftMetaEnv :: Environment -> Environment
-liftMetaEnv = liftMetaEnvN 1
-
-liftMetaEnvN :: Int -> Environment -> Environment
-liftMetaEnvN n env = env ||><| fmap f (fromList [s .. s + n])
-  where
-    s = size env
-    f = mvvar . LevelId
+    f = AmbiguousLevel . LevelId
 
 splitEnv :: Int -> Environment -> (Environment, Seq EnvItem)
 splitEnv n (Env env) = (Env (Seq.take (size env - n) env), Seq.drop (size env - n) env)

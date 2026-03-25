@@ -236,7 +236,7 @@ instance TypeCheck Term where
           _ <- doConv ctx pTy dom
           return pTy
 
-      cod <- doEvalHOAS liftObjEnv codHOAS
+      cod <- doEvalHOAS liftEnv codHOAS
       bodyTm <- check (ctx |:> domTy) body cod
       return $
         WfTerm

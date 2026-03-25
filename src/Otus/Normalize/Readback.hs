@@ -16,7 +16,7 @@ class Quotable v where
 instance Quotable ObjHOAS where
   type QuoteRes ObjHOAS = Term
   quote lvl hoas = do
-    val <- evalHOAS hoas liftObjEnv
+    val <- evalHOAS hoas liftEnv
     quote (incrLvl lvl) val
 
 instance Quotable VTelescope where
@@ -28,7 +28,7 @@ instance Quotable VTelescope where
         VTNil -> return Empty
         VTCons ty rstHOAS -> do
           tyTm <- quote l ty
-          rst <- evalHOAS rstHOAS liftObjEnv
+          rst <- evalHOAS rstHOAS liftEnv
           rstTm <- go (incrLvl l) rst
           return $ tyTm :<| rstTm
 
@@ -108,7 +108,7 @@ instance Quotable Value where
 instance Quotable MetaHOAS where
   type QuoteRes MetaHOAS = MetaTerm
   quote lvl hoas = do
-    val <- evalHOAS hoas liftMetaEnv
+    val <- evalHOAS hoas liftEnv
     quote (incrLvl lvl) val
 
 quoteMSpine :: LevelId -> MetaTerm -> MetaSpine -> EvalResult MetaTerm
@@ -126,9 +126,9 @@ quoteMSpine lvl stuck = \case
     return $ MLetIn prevTm bTm bindTyTm
   MSExt spine lift problemHOAS recordHOAS -> do
     sTm <- quoteMSpine lvl stuck spine
-    problem <- evalHOAS problemHOAS (liftObjEnvN lift)
+    problem <- evalHOAS problemHOAS (liftEnvN lift)
     problemTm <- quote (shift lift lvl) problem
-    record <- evalHOAS recordHOAS (liftObjEnvN (lift + size problem))
+    record <- evalHOAS recordHOAS (liftEnvN (lift + size problem))
     recordTm <- quote (shift (lift + size problem) lvl) record
     return $ MExt sTm lift problemTm recordTm
   MSSolve s -> MSolve <$> quoteMSpine lvl stuck s
@@ -154,6 +154,6 @@ instance Quotable MetaValue where
     MVDyn t -> MDyn <$> quote lvl t
     MVGuard prob recordHOAS -> do
       probTm <- quote lvl prob
-      record <- evalHOAS recordHOAS (liftObjEnvN (size prob))
+      record <- evalHOAS recordHOAS (liftEnvN (size prob))
       recordTm <- quote (shift (size prob) lvl) record
       return $ MGuard probTm recordTm
