@@ -1,58 +1,27 @@
 module Otus.Normalize.Unify.Unify (
-  solveProblem,
+  solveConstraint,
   unifyTm,
 ) where
 
-import Control.Monad (when)
 import Control.Monad.Error.Class (MonadError (throwError))
+import Control.Monad.State.Lazy
 
 import qualified Data.IntMap as IM
 import qualified Data.Set as Set
 
 import Otus.Ast
 import Otus.Common
+import Otus.Normalize.Control
 import Otus.Normalize.Error
 import {-# SOURCE #-} Otus.Normalize.Eval
 import Otus.Normalize.Unify.Conv
 import Otus.Normalize.Unify.State
 import Otus.Normalize.Value
 
--- Problem Set
-
-type LevelSet = Set.Set LevelId
-
-data Equation = Equation
-  { eLvl :: LevelId,
-    eLhs :: Value,
-    eRhs :: Value,
-    stuckOn :: LevelSet
-  }
-
-data EquationGroup = EqGroup
-  { groupLvl :: LevelId,
-    equations :: Seq Equation,
-    eqProof :: Value
-  }
-
-data EquationSet = EqSet
-  { pBaseLvl :: LevelId,
-    groups :: Seq EquationGroup
-  }
-
 data SolveResult = SolveResult
   { postponed :: Seq Equation,
     solvedEntries :: LevelSet
   }
-
-instance Semigroup EquationSet where
-  l <> r =
-    EqSet
-      { pBaseLvl = pBaseLvl l,
-        groups = groups l <> groups r
-      }
-
-instance Monoid EquationSet where
-  mempty = EqSet (LevelId 0) Empty
 
 instance Semigroup SolveResult where
   l <> r = SolveResult (postponed l <> postponed r) (solvedEntries l <> solvedEntries r)
@@ -63,82 +32,45 @@ instance Monoid SolveResult where
 postpone :: Equation -> SolveResult
 postpone c = SolveResult (singleton c) mempty
 
--- Process
-buildEquationSet :: LevelId -> VProblem -> EquationSet
-buildEquationSet lvl problem =
-  let eqGroups = buildGroups lvl problem
-  in EqSet lvl eqGroups
-  where
-    buildGroup pLvl = \case
-      VTmEq localTele lhs rhs _ ->
-        let localLvl = shift (size localTele) pLvl
-        in Just $
-             EqGroup
-               { groupLvl = pLvl,
-                 equations = singleton (Equation localLvl lhs rhs mempty),
-                 eqProof = absRefl (size localTele)
-               }
-      _ -> Nothing
-
-    buildGroups pLvl = \case
-      Empty -> Empty
-      c :<| rest ->
-        let restEqs = buildGroups (incrLvl pLvl) rest
-        in case buildGroup pLvl c of
-             Just group -> group <| restEqs
-             _ -> restEqs
-
 -- | Solve one equation group:
 -- | unify all equations, keep postponed ones, and update the group's proof when fully solved.
 -- | Returns (isGroupSolved, updatedEquationSet, solvedEntries).
-solveGroup :: EquationGroup -> UnifyMonad (Bool, EquationGroup, LevelSet)
-solveGroup group = do
+solveSeg :: ProblemSeg -> UnifyMonad (Bool, LevelSet)
+solveSeg (MetaDef _) = return (True, mempty)
+solveSeg (Equations group) = do
   let gLvl = groupLvl group
   setMaskLvl gLvl
-
   (leftEqs, solved) <- foldlM step (Empty, mempty) (equations group)
-  let
-    groupSolved = null leftEqs
-    group' = group {equations = leftEqs}
-
-  when groupSolved $
-    setEntry gLvl (ConstraintProof (Just $ eqProof group))
-
-  pure (groupSolved, group', solved)
+  setEquations gLvl leftEqs
+  return (null leftEqs, solved)
   where
     step (carryEqs, carrySolved) (Equation lvl lhs rhs _) = do
       res <- unifyTm lvl lhs rhs
       pure (carryEqs >< postponed res, carrySolved <> solvedEntries res)
 
-solveStep :: EquationSet -> UnifyMonad (Bool, EquationSet, LevelSet)
-solveStep eqSet = do
-  (finished, resGroups, solved) <- foldlM step (True, Empty, mempty) (groups eqSet)
-
-  return (finished, eqSet {groups = resGroups}, solved)
+solveStep :: Problem -> UnifyMonad (Bool, LevelSet)
+solveStep problem = foldlM step (True, mempty) (problemSegs problem)
   where
-    step (allSolved, carryGroups, carrySolved) group = do
-      (segSolved, resGroup, groupSolved) <- solveGroup group
-      return (allSolved && segSolved, carryGroups |> resGroup, Set.union carrySolved groupSolved)
+    step (allSolved, carrySolved) seg = do
+      (segSolved, groupSolved) <- solveSeg seg
+      return (allSolved && segSolved, Set.union carrySolved groupSolved)
 
-solveCycle :: EquationSet -> UnifyMonad ()
-solveCycle = go
-  where
-    go eqSet = do
-      (allSolved, nextEqSet, solved) <- solveStep eqSet
-      if allSolved then
-        return ()
-      else
-        if Set.null solved then
-          conflict
-        else
-          go nextEqSet
+solveCycle :: UnifyMonad ()
+solveCycle = do
+  prob <- get
+  (allSolved, solved) <- solveStep prob
+  if allSolved then
+    return ()
+  else
+    if Set.null solved then
+      conflict
+    else
+      solveCycle
 
-solveProblem :: LevelId -> VProblem -> UnifyMonad VRecord
-solveProblem lvl problem = do
-  initUnifyEnv lvl problem
-  let eqSet = buildEquationSet lvl problem
-  solveCycle eqSet
-  readSolveResultRecord
+solveConstraint :: LevelId -> VConstraint -> EvalResult (UnifyResult VRecord)
+solveConstraint lvl cstr =
+  let m = solveCycle >> readSolveResultRecord
+  in execUnifyMonad m (buildProblem lvl cstr)
 
 -- Unification
 data PartialRenaming = PRen
@@ -262,7 +194,7 @@ solveMetaEntry lvl metaId sp rhs =
         Just rhsTm -> do
           let solutionTm = lamN spSize rhsTm
           solution <- liftEval $ evaluateTerm solutionTm (trivalEnv lvl)
-          setEntry metaId (MetaVar (Just (solution, solutionTm)))
+          solveMeta metaId (solutionTm, solution)
           return $ SolveResult mempty (Set.singleton metaId)
         _ -> postponeEquation
     _ -> postponeEquation

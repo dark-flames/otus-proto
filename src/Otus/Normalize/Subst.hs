@@ -102,18 +102,18 @@ instance Substitutable MetaTerm where
     MLift tele -> MLift <$> subst tele sb
     MQuote record -> MQuote <$> subst record sb
     MDyn tele -> MDyn <$> subst tele sb
-    MGuard prob record -> do
-      prob' <- subst prob sb
-      sb' <- liftNSb (size prob') sb
+    MGuard cstr record -> do
+      cstr' <- subst cstr sb
+      sb' <- liftNSb (size cstr) sb
       record' <- subst record sb'
-      return $ MGuard prob' record'
-    MExt prev n prob record -> do
+      return $ MGuard cstr' record'
+    MExt prev n cstr record -> do
       prev' <- go prev
       sb' <- liftNSb n sb
-      prob' <- subst prob sb'
-      sb'' <- liftNSb (size prob') sb'
+      cstr' <- subst cstr sb'
+      sb'' <- liftNSb (size cstr') sb'
       record' <- subst record sb''
-      return $ MExt prev' n prob' record'
+      return $ MExt prev' n cstr' record'
     MPi dom eff cod -> do
       dom' <- go dom
       cod' <- goLift cod
@@ -207,25 +207,24 @@ instance Substitutable Telescope where
 
 instance Substitutable Constraint where
   subst :: Constraint -> Subst -> Maybe Constraint
-  subst c sb = case c of
-    TmEq tele lhs rhs ty -> do
-      tele' <- subst tele sb
-      sb' <- liftNSb (size tele') sb
-      lhs' <- subst lhs sb'
-      rhs' <- subst rhs sb'
-      ty' <- subst ty sb'
-      return $ TmEq tele' lhs' rhs' ty'
-    MetaDef ty -> MetaDef <$> subst ty sb
-
-instance Substitutable Problem where
-  subst :: Problem -> Subst -> Maybe Problem
-  subst p sb = case p of
-    Empty -> return Empty
-    c :<| rst -> do
-      c' <- subst c sb
-      sb' <- liftSb sb
-      rst' <- subst rst sb'
-      return $ c' :<| rst'
+  subst c sb = fst <$> go c
+    where
+      go = \case
+        CstrEmpty -> return (CstrEmpty, sb)
+        CstrDef prev ty -> do
+          (prev', sb') <- go prev
+          ty' <- subst ty sb'
+          sb'' <- liftSb sb'
+          return (CstrDef prev' ty', sb'')
+        CstrTmEq prev tele lhs rhs ty -> do
+          (prev', sb') <- go prev
+          tele' <- subst tele sb'
+          localSb <- liftNSb (size tele') sb
+          lhs' <- subst lhs localSb
+          rhs' <- subst rhs localSb
+          ty' <- subst ty localSb
+          sb'' <- liftSb sb'
+          return (CstrTmEq prev' tele' lhs' rhs' ty', sb'')
 
 instance Substitutable Record where
   subst :: Record -> Subst -> Maybe Record

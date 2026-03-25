@@ -101,25 +101,22 @@ instance Evaluatable Record where
 instance Evaluatable Constraint where
   type EvalRes Constraint = VConstraint
 
-  evaluate constr env = case constr of
-    (TmEq tele lhs rhs eqTy) -> do
-      vTeleSeq <- evaluate tele env >>= intoTeleSequence
-      let env' = liftEnvN (size tele) env
-      vEqTy <- evaluate eqTy env'
-      vLhs <- evaluate lhs env'
-      vRhs <- evaluate rhs env'
-      return $ VTmEq vTeleSeq vLhs vRhs vEqTy
-    MetaDef ty -> VMetaDef <$> evaluate ty env
-
-instance Evaluatable Problem where
-  type EvalRes Problem = VProblem
-
-  evaluate p env = case p of
-    Empty -> return Empty
-    c :<| prob -> do
-      vC <- evaluate c env
-      vProb <- evaluate prob (liftEnv env)
-      return $ vC :<| vProb
+  evaluate cstr env = fst <$> go cstr
+    where
+      go = \case
+        CstrEmpty -> return (VCstrEmpty, env)
+        CstrTmEq prev tele lhs rhs eqTy -> do
+          (prevCstr, env') <- go prev
+          vTeleSeq <- evaluate tele env' >>= intoTeleSequence
+          let env'' = liftEnvN (size tele) env'
+          vEqTy <- evaluate eqTy env''
+          vLhs <- evaluate lhs env''
+          vRhs <- evaluate rhs env''
+          return (VCstrTmEq prevCstr vTeleSeq vLhs vRhs vEqTy, liftEnv env')
+        CstrDef prev ty -> do
+          (prevCstr, env') <- go prev
+          vty <- evaluate ty env'
+          return (VCstrDef prevCstr vty, liftEnv env')
 
 instance Evaluatable Term where
   type EvalRes Term = Value
@@ -182,23 +179,23 @@ evaluateMBind prev curHOAS tyHOAS = case prev of
 
 --
 
-evaluateMExt :: MetaValue -> Int -> ProblemHOAS -> HOAS VRecord -> EvalResult MetaValue
-evaluateMExt prev lift probHOAS recordHOAS = case prev of
-  MVGuard prevProb prevRecordHOAS -> do
-    prevRecord <- evalHOAS prevRecordHOAS (liftEnvN (size prevProb))
-    prob <- evalHOAS probHOAS (pushEnvN prevRecord)
-    let record pushAllProblem =
+evaluateMExt :: MetaValue -> Int -> CstrHOAS -> HOAS VRecord -> EvalResult MetaValue
+evaluateMExt prev lift cstrHOAS recordHOAS = case prev of
+  MVGuard prevCstr prevRecordHOAS -> do
+    prevRecord <- evalHOAS prevRecordHOAS (liftEnvN (size prevCstr))
+    cstr <- evalHOAS cstrHOAS (pushEnvN prevRecord)
+    let record pushAllCstr =
           ( do
-              let pushPrevProblem = fst . splitEnv (size prob) . pushAllProblem
-              let pushProblem e = e ||><| snd (splitEnv (size prob) (pushAllProblem e))
-              -- get the value of prevMeta and prevProb, and then evaluate prevRecord
-              pushPrevRecord <- pushEnvN <$> evalHOAS prevRecordHOAS pushPrevProblem
-              -- push prevRecord and prob
-              let pushPrevRecordWithProb = pushProblem . pushPrevRecord
-              evalHOAS recordHOAS pushPrevRecordWithProb
+              let pushPrevCstr = fst . splitEnv (size cstr) . pushAllCstr
+              let pushCstr e = e ||><| snd (splitEnv (size cstr) (pushAllCstr e))
+              -- get the value of prevMeta and prevCstr, and then evaluate prevRecord
+              pushPrevRecord <- pushEnvN <$> evalHOAS prevRecordHOAS pushPrevCstr
+              -- push prevRecord and cstr
+              let pushPrevRecordWithCstr = pushCstr . pushPrevRecord
+              evalHOAS recordHOAS pushPrevRecordWithCstr
           )
-    return $ MVGuard (prevProb >< prob) (HOAS record)
-  MNeutral h spine -> return $ MNeutral h (MSExt spine lift probHOAS recordHOAS)
+    return $ MVGuard (prevCstr <> cstr) (HOAS record)
+  MNeutral h spine -> return $ MNeutral h (MSExt spine lift cstrHOAS recordHOAS)
   _ -> throwError AbsOnNonDyn
 
 absRefl :: Int -> Value
@@ -208,8 +205,8 @@ absRefl = \case
 
 evaluateSolve :: LevelId -> MetaValue -> EvalResult MetaValue
 evaluateSolve lvl = \case
-  MVGuard prob recordHOAS -> do
-    solveRes <- execUnifyMonad (solveProblem lvl prob) (emptyUnifyEnv lvl)
+  MVGuard cstr recordHOAS -> do
+    solveRes <- solveConstraint lvl cstr
     case solveRes of
       Consistent solutionRecord -> do
         record <- evalHOAS recordHOAS (pushEnvN solutionRecord)
@@ -239,12 +236,12 @@ instance Evaluatable MetaTerm where
     MDyn tele -> do
       vtele <- evaluate tele env
       return $ MVDyn vtele
-    MGuard prob record -> do
-      vProblem <- evaluate prob env
-      return $ MVGuard vProblem (makeCls record env)
-    MExt prev lift prob record -> do
+    MGuard cstr record -> do
+      vCstr <- evaluate cstr env
+      return $ MVGuard vCstr (makeCls record env)
+    MExt prev lift cstr record -> do
       vPrev <- evaluate prev env
-      evaluateMExt vPrev lift (makeCls prob env) (makeCls record env)
+      evaluateMExt vPrev lift (makeCls cstr env) (makeCls record env)
     -- Computation
     MPi dom eff cod -> do
       vDom <- evaluate dom env

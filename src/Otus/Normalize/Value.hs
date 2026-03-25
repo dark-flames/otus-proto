@@ -12,12 +12,11 @@ module Otus.Normalize.Value (
   ObjHOAS,
   TeleHOAS,
   RecordHOAS,
-  ProblemHOAS,
+  CstrHOAS,
   VTelescope (..),
   VTeleSequence (..),
   VRecord,
   VConstraint (..),
-  VProblem,
   Spine (..),
   Stuck (..),
   Value (..),
@@ -95,7 +94,7 @@ type ObjHOAS = HOAS Value
 
 type TeleHOAS = HOAS VTelescope
 
-type ProblemHOAS = HOAS VProblem
+type CstrHOAS = HOAS VConstraint
 
 data VTelescope
   = VTNil
@@ -107,11 +106,10 @@ newtype VTeleSequence = VTeleSeq
 
 type VRecord = Seq Value
 
-type VProblem = Seq VConstraint
-
 data VConstraint
-  = VTmEq VTeleSequence Value Value Value
-  | VMetaDef Value
+  = VCstrEmpty
+  | VCstrTmEq VConstraint VTeleSequence Value Value Value
+  | VCstrDef VConstraint Value
 
 data Spine
   = SPNil
@@ -140,7 +138,7 @@ data MetaSpine
   | MSPApp MetaSpine MetaValue
   | MSForce MetaSpine
   | MSBind MetaSpine MetaHOAS MetaHOAS
-  | MSExt MetaSpine Int ProblemHOAS RecordHOAS
+  | MSExt MetaSpine Int CstrHOAS RecordHOAS
   | MSSolve MetaSpine
 
 data MetaValue
@@ -159,7 +157,7 @@ data MetaValue
   | MVLift VTelescope
   | MVQuote VRecord
   | MVDyn VTelescope
-  | MVGuard VProblem RecordHOAS
+  | MVGuard VConstraint RecordHOAS
 
 instance Sized Environment where
   size = size . unEnv
@@ -170,6 +168,17 @@ instance Indexable Environment where
 
 instance Sized VTeleSequence where
   size = size . unVTele
+
+instance Sized VConstraint where
+  size VCstrEmpty = 0
+  size (VCstrDef prev _) = size prev + 1
+  size (VCstrTmEq prev _ _ _ _) = size prev + 1
+
+instance Semigroup VConstraint where
+  (<>) prev = \case
+    VCstrEmpty -> prev
+    VCstrDef rPrev ty -> VCstrDef (prev <> rPrev) ty
+    VCstrTmEq rPrev tele lhs rhs ty -> VCstrTmEq (prev <> rPrev) tele lhs rhs ty
 
 instance Domain Value where
   type Syntax Value = Term

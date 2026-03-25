@@ -3,7 +3,6 @@ module Otus.Ast.Term (
   Record (..),
   Sequence (..),
   Constraint (..),
-  Problem,
   Term (..),
   EffectSet,
   MetaTerm (..),
@@ -30,11 +29,10 @@ newtype Sequence = Sequence
   }
   deriving (Eq, Show)
 
-type Problem = Seq Constraint
-
 data Constraint
-  = TmEq Telescope Term Term Term
-  | MetaDef Term
+  = CstrEmpty
+  | CstrTmEq Constraint Telescope Term Term Term
+  | CstrDef Constraint Term
   deriving (Eq, Show)
 
 type OptionalTy = Maybe Term
@@ -75,8 +73,8 @@ data MetaTerm
     MLift Telescope
   | MQuote Record
   | MDyn Telescope
-  | MGuard Problem Record
-  | MExt MetaTerm Int Problem Record
+  | MGuard Constraint Record
+  | MExt MetaTerm Int Constraint Record
   | -- Computation
     MPi MetaTerm EffectSet MetaTerm
   | MLam OptionalMetaTy MetaTerm
@@ -95,6 +93,11 @@ instance Sized Telescope where
 
 instance Sized Record where
   size = size . unRecord
+
+instance Sized Constraint where
+  size CstrEmpty = 0
+  size (CstrDef prev _) = size prev + 1
+  size (CstrTmEq prev _ _ _ _) = size prev + 1
 
 instance Pretty Telescope where
   pretty = pretty . unTele

@@ -1,17 +1,22 @@
 module Otus.Normalize.Unify.State (
+  LevelSet,
+  Problem (..),
+  Equation (..),
+  EquationGroup (..),
+  ProblemSeg (..),
   Entry (..),
-  UnifyEnv (..),
+  buildProblem,
   findEntry,
   isMetaEntry,
   isLocalEntry,
-  setEntry,
+  solveMeta,
+  setEquations,
   setMaskLvl,
   incrMaskLvl,
   readSolveResultRecord,
   UnifyResult (..),
   UnifyMonad,
-  emptyUnifyEnv,
-  initUnifyEnv,
+  initProblem,
   runUnifyMonad,
   execUnifyMonad,
   execConv,
@@ -27,6 +32,7 @@ import Control.Monad.Error.Class (MonadError (throwError))
 import Control.Monad.State.Lazy
 
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 
 import Otus.Ast
 import Otus.Common
@@ -37,37 +43,119 @@ import Otus.Normalize.Value
 
 data Entry
   = EnvVar
-  | MetaVar (Maybe (Value, Term))
-  | ConstraintProof (Maybe Value)
+  | MetaVar (Maybe (Term, Value))
+  | ConstraintProof (Maybe (Term, Value))
   | LocalVar
 
-data UnifyEnv = UnifyEnv
+-- Problem Set
+
+type LevelSet = Set.Set LevelId
+
+data Equation = Equation
+  { eLvl :: LevelId,
+    eLhs :: Value,
+    eRhs :: Value,
+    stuckOn :: LevelSet
+  }
+
+data EquationGroup = EqGroup
+  { groupLvl :: LevelId,
+    equations :: Seq Equation,
+    eqProof :: (Term, Value)
+  }
+
+data ProblemSeg
+  = MetaDef (Maybe (Term, Value))
+  | Equations EquationGroup
+
+data Problem = Problem
   { baseLvl :: LevelId,
-    entries :: Seq Entry,
+    problemSegs :: Seq ProblemSeg,
     maskLvl :: LevelId
   }
 
+instance Semigroup Problem where
+  l <> r =
+    Problem
+      { baseLvl = baseLvl l,
+        problemSegs = problemSegs l <> problemSegs r,
+        maskLvl = maskLvl l
+      }
+
+buildProblem :: LevelId -> VConstraint -> Problem
+buildProblem lvl cstr =
+  let (mask, segs) = buildSegs cstr
+  in Problem lvl segs mask
+  where
+    buildSegs = \case
+      VCstrEmpty -> (lvl, Empty)
+      VCstrDef prev _ ->
+        let (sLvl, prevSegs) = buildSegs prev
+        in ( incrLvl sLvl,
+             prevSegs |> MetaDef Nothing
+           )
+      VCstrTmEq prev localTele lhs rhs _ ->
+        let
+          (sLvl, prevSegs) = buildSegs prev
+          localLvl = shift (size localTele) sLvl
+          absN = size localTele
+        in
+          ( incrLvl sLvl,
+            prevSegs
+              |> ( Equations $
+                     EqGroup
+                       { groupLvl = sLvl,
+                         equations = singleton (Equation localLvl lhs rhs mempty),
+                         eqProof = (lamN absN Refl, absRefl absN)
+                       }
+                 )
+          )
+
 findEntry :: LevelId -> UnifyMonad Entry
 findEntry lvl = do
-  uEnv <- get
-  if lvl < baseLvl uEnv then
+  prob <- get
+  if lvl < baseLvl prob then
     return EnvVar
   else
-    if lvl < maskLvl uEnv then case entries uEnv @? sub lvl (baseLvl uEnv) of
-      Just e -> return e
+    if lvl < maskLvl prob then case problemSegs prob @? sub lvl (baseLvl prob) of
+      Just seg -> case seg of
+        Equations group ->
+          ConstraintProof
+            <$> if null $ equations group then
+              return (Just $ eqProof group)
+            else
+              return Nothing
+        MetaDef s -> return $ MetaVar s
       Nothing -> throwError $ Anyhow "impossible"
     else
       return LocalVar
 
-setEntry :: LevelId -> Entry -> UnifyMonad ()
-setEntry lvl entry = do
-  uEnv <- get
-  if lvl < baseLvl uEnv then
-    throwError $ Anyhow "Cannot set env var"
+solveMeta :: LevelId -> (Term, Value) -> UnifyMonad ()
+solveMeta lvl s = do
+  prob <- get
+  if lvl < baseLvl prob then
+    throwError $ Anyhow "Cannot solve env var"
   else do
-    let idx = sub lvl (baseLvl uEnv)
-    let newEntries = Seq.update idx entry (entries uEnv)
-    put (UnifyEnv (baseLvl uEnv) newEntries (maskLvl uEnv))
+    let idx = sub lvl (baseLvl prob)
+    newSegs <- case problemSegs prob @? idx of
+      Nothing -> throwError $ Anyhow "Unknown seg"
+      Just (MetaDef Nothing) -> return $ Seq.update idx (MetaDef $ Just s) (problemSegs prob)
+      Just (MetaDef _) -> throwError $ Anyhow "Cannot solve twice"
+      Just (Equations _) -> throwError $ Anyhow "Cannot solve tm eq"
+    put $ prob {problemSegs = newSegs}
+
+setEquations :: LevelId -> Seq Equation -> UnifyMonad ()
+setEquations lvl eqs = do
+  prob <- get
+  if lvl < baseLvl prob then
+    throwError $ Anyhow "Cannot solve env var"
+  else do
+    let idx = sub lvl (baseLvl prob)
+    newSegs <- case problemSegs prob @? idx of
+      Nothing -> throwError $ Anyhow "Unknown seg"
+      Just (MetaDef _) -> throwError $ Anyhow "Cannot set eqGroup of meta def"
+      Just (Equations group) -> return $ Seq.update idx (Equations group {equations = eqs}) (problemSegs prob)
+    put $ prob {problemSegs = newSegs}
 
 isMetaEntry :: LevelId -> UnifyMonad Bool
 isMetaEntry lvl =
@@ -82,27 +170,31 @@ isLocalEntry lvl =
     _ -> return False
 
 setMaskLvl :: LevelId -> UnifyMonad ()
-setMaskLvl lvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) lvl)
+setMaskLvl lvl = modify (\e -> Problem (baseLvl e) (problemSegs e) lvl)
 
 incrMaskLvl :: UnifyMonad ()
-incrMaskLvl = modify (\e -> UnifyEnv (baseLvl e) (entries e) (incrLvl $ maskLvl e))
+incrMaskLvl = modify (\e -> Problem (baseLvl e) (problemSegs e) (incrLvl $ maskLvl e))
 
 readSolveResultRecord :: UnifyMonad VRecord
 readSolveResultRecord = do
-  uEnv <- get
-  let e = trivalEnv (baseLvl uEnv)
-  go e (entries uEnv)
+  prob <- get
+  let e = trivalEnv (baseLvl prob)
+  go e (problemSegs prob)
   where
     go env = \case
       Empty -> return Empty
-      entry :<| rst -> case entry of
-        MetaVar (Just (_, tm)) -> do
+      seg :<| rst -> case seg of
+        MetaDef (Just (tm, _)) -> do
           v <- liftEval $ evaluateTerm tm env
           vRst <- go (pushEnv v env) rst
           return $ v :<| vRst
-        ConstraintProof (Just v) -> do
-          vRst <- go (pushEnv v env) rst
-          return $ v :<| vRst
+        Equations group ->
+          if null $ equations group then do
+            let v = snd $ eqProof group
+            vRst <- go (pushEnv v env) rst
+            return $ v :<| vRst
+          else
+            conflict
         _ -> conflict
 
 -- Control
@@ -123,33 +215,28 @@ instance Monad UnifyResult where
   Consistent r >>= k = k r
   Conflict >>= _ = Conflict
 
-type UnifyMonad = StateT UnifyEnv (EvalResultT UnifyResult)
+type UnifyMonad = StateT Problem (EvalResultT UnifyResult)
 
-emptyUnifyEnv :: LevelId -> UnifyEnv
-emptyUnifyEnv lvl = UnifyEnv lvl Empty lvl
+emptyProblem :: LevelId -> Problem
+emptyProblem lvl = Problem lvl Empty (incrLvl lvl)
 
-initUnifyEnv :: LevelId -> VProblem -> UnifyMonad ()
-initUnifyEnv lvl prob = put $ UnifyEnv lvl envEntries lvl
-  where
-    constrToEntry = \case
-      VTmEq {} -> ConstraintProof Nothing
-      VMetaDef _ -> MetaVar Nothing
-    envEntries = fmap constrToEntry prob
+initProblem :: LevelId -> VConstraint -> UnifyMonad ()
+initProblem lvl cstr = put $ buildProblem lvl cstr
 
-runUnifyMonad :: UnifyMonad a -> UnifyEnv -> EvalResult (UnifyResult (a, UnifyEnv))
-runUnifyMonad m env =
-  case runResultT (runStateT m env) of
+runUnifyMonad :: UnifyMonad a -> Problem -> EvalResult (UnifyResult (a, Problem))
+runUnifyMonad m prob =
+  case runResultT (runStateT m prob) of
     Conflict -> Success Conflict
     Consistent r ->
       case r of
         Failure err -> Failure err
         Success x -> Success (Consistent x)
 
-execUnifyMonad :: UnifyMonad a -> UnifyEnv -> EvalResult (UnifyResult a)
-execUnifyMonad m env = fmap fst <$> runUnifyMonad m env
+execUnifyMonad :: UnifyMonad a -> Problem -> EvalResult (UnifyResult a)
+execUnifyMonad m prob = fmap fst <$> runUnifyMonad m prob
 
 execConv :: LevelId -> UnifyMonad () -> EvalResult Bool
-execConv lvl m = f <$> execUnifyMonad m (emptyUnifyEnv lvl)
+execConv lvl m = f <$> execUnifyMonad m (emptyProblem lvl)
   where
     f = \case
       Conflict -> False
@@ -179,7 +266,7 @@ force = \case
   Neutral (NVar lvl) spine -> do
     entry <- findEntry lvl
     case entry of
-      MetaVar (Just (solution, _)) -> liftEval $ evaluateNeutral solution spine
-      ConstraintProof (Just eqRefl) -> liftEval $ evaluateNeutral eqRefl spine
+      MetaVar (Just (_, solution)) -> liftEval $ evaluateNeutral solution spine
+      ConstraintProof (Just (_, eqRefl)) -> liftEval $ evaluateNeutral eqRefl spine
       _ -> return $ Neutral (NVar lvl) spine
   val -> return val

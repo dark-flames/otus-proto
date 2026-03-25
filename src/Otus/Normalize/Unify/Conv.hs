@@ -4,6 +4,8 @@ module Otus.Normalize.Unify.Conv (
   ConvCheck (..),
 ) where
 
+import Control.Monad (void)
+
 import Otus.Ast
 import Otus.Common
 import {-# SOURCE #-} Otus.Normalize.Eval
@@ -41,21 +43,23 @@ instance ConvCheck VRecord where
   conv _ _ _ = conflict
 
 instance ConvCheck VConstraint where
-  conv lvl (VTmEq lTele lLhs lRhs lTy) (VTmEq rTele rLhs rRhs rTy) = do
-    conv lvl lTele rTele
-    let l = shift (size lTele) lvl
-    conv l lTy rTy
-    conv l lLhs rLhs
-    conv l lRhs rRhs
-  conv lvl (VMetaDef lTy) (VMetaDef rTy) = conv lvl lTy rTy
-  conv _ _ _ = conflict
-
-instance ConvCheck VProblem where
-  conv _ Empty Empty = return ()
-  conv lvl (lp :<| lr) (rp :<| rr) = do
-    conv lvl lp rp
-    conv lvl lr rr
-  conv _ _ _ = conflict
+  conv lvl lc rc = void $ go lc rc
+    where
+      go lhs rhs = case (lhs, rhs) of
+        (VCstrEmpty, VCstrEmpty) -> return lvl
+        (VCstrTmEq lPrev lTele lLhs lRhs lTy, VCstrTmEq rPrev rTele rLhs rRhs rTy) -> do
+          cLvl <- go lPrev rPrev
+          conv cLvl lTele rTele
+          let l = shift (size lTele) cLvl
+          conv l lTy rTy
+          conv l lLhs rLhs
+          conv l lRhs rRhs
+          return $ incrLvl cLvl
+        (VCstrDef lPrev lTy, VCstrDef rPrev rTy) -> do
+          cLvl <- go lPrev rPrev
+          conv cLvl lTy rTy
+          return $ incrLvl cLvl
+        _ -> conflict
 
 instance ConvCheck Spine where
   conv lvl lhs rhs = case (lhs, rhs) of
@@ -138,13 +142,13 @@ instance ConvCheck MetaValue where
     (MVLift lTele, MVLift rTele) -> conv lvl lTele rTele
     (MVQuote lList, MVQuote rList) -> conv lvl lList rList
     (MVDyn lTele, MVDyn rTele) -> conv lvl lTele rTele
-    (MVGuard lProblem lRecordHOAS, MVGuard rProblem rRecordHOAS) -> do
-      let problemSize = size lProblem
-      conv lvl lProblem rProblem
-      let pushLvls = liftEnvN problemSize
+    (MVGuard lCstr lRecordHOAS, MVGuard rCstr rRecordHOAS) -> do
+      let cstrSize = size lCstr
+      conv lvl lCstr rCstr
+      let pushLvls = liftEnvN cstrSize
       lRecord <- liftEval $ evalHOAS lRecordHOAS pushLvls
       rRecord <- liftEval $ evalHOAS rRecordHOAS pushLvls
-      conv (shift problemSize lvl) lRecord rRecord
+      conv (shift cstrSize lvl) lRecord rRecord
     -- computation
     (MVPi lDom le lHOAS, MVPi rDom re rHOAS) -> do
       conv lvl lDom rDom

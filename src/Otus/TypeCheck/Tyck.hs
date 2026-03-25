@@ -64,31 +64,28 @@ checkRecord c r vt = RecordSeq <$> go c (unRecord r) vt
         teleTm <- doQuote ctx tele
         throwError $ CannotCheckRecord (RecordSeq preRecord) teleTm
 
-checkConstraint :: Context -> Constraint -> TypeCheckResult (Constraint, Type)
-checkConstraint ctx = \case
-  TmEq preTele preLhs preRhs preTy -> do
-    (tele, _) <- inferTelescope ctx preTele
-    vTele <- doEvalVTeleSeq ctx tele
-    let ctx' = pushVTeleSeq vTele ctx
-    (tyTm, ty, _) <- inferTy' ctx' preTy
-    lhs <- tmOf <$> check ctx preLhs ty
-    rhs <- tmOf <$> check ctx preRhs ty
-    let eqTyTm = piTele tele (Id (tmOf tyTm) lhs rhs)
-    eqTy <- doEval ctx eqTyTm
-    return (TmEq tele lhs rhs (tmOf tyTm), eqTy)
-  MetaDef preTy -> do
-    (tyTm, ty, _) <- inferTy' ctx preTy
-    return (MetaDef (tmOf tyTm), ty)
-
-checkProblem :: Context -> Problem -> TypeCheckResult (Problem, VTeleSequence)
-checkProblem c p = mapSnd VTeleSeq <$> go c p
+checkConstraint :: Context -> Constraint -> TypeCheckResult (Constraint, VTeleSequence)
+checkConstraint ctx cstr = do
+  (cstr', teleSeq, _) <- go cstr
+  return (cstr', VTeleSeq teleSeq)
   where
-    go ctx = \case
-      Empty -> return (Empty, Empty)
-      (preConstraint :<| preRst) -> do
-        (constraint, eqTy) <- checkConstraint ctx preConstraint
-        (rst, rstTele) <- go (ctx |:> eqTy) preRst
-        return (constraint :<| rst, eqTy :<| rstTele)
+    go = \case
+      CstrEmpty -> return (CstrEmpty, Empty, ctx)
+      CstrDef prev preTy -> do
+        (prevTm, prevTy, ctx') <- go prev
+        (tyTm, ty, _) <- inferTy' ctx' preTy
+        return (CstrDef prevTm (tmOf tyTm), prevTy |> ty, ctx' |:> ty)
+      CstrTmEq prev preTele preLhs preRhs preTy -> do
+        (prevTm, prevTy, ctx') <- go prev
+        (tele, _) <- inferTelescope ctx' preTele
+        vTele <- doEvalVTeleSeq ctx' tele
+        let localCtx = pushVTeleSeq vTele ctx'
+        (tyTm, ty, _) <- inferTy' localCtx preTy
+        lhs <- tmOf <$> check localCtx preLhs ty
+        rhs <- tmOf <$> check localCtx preRhs ty
+        let eqTyTm = piTele tele (Id (tmOf tyTm) lhs rhs)
+        eqTy <- doEval ctx' eqTyTm
+        return (CstrTmEq prevTm tele lhs rhs (tmOf tyTm), prevTy |> eqTy, ctx' |:> eqTy)
 
 instance TypeCheck Term where
   type Ty Term = Type
@@ -457,24 +454,24 @@ instance TypeCheck MetaTerm where
     (MQuote preRecord, MVLift vTele) -> do
       record <- checkRecord ctx preRecord vTele
       return $ wfMetaValue (MQuote record) (MVLift vTele)
-    (MGuard preProblem preRecord, MVDyn vTele) -> do
-      (problem, problemTele) <- checkProblem ctx preProblem
-      let recordCtx = pushVTeleSeq problemTele ctx
+    (MGuard preCstr preRecord, MVDyn vTele) -> do
+      (cstr, cstrTele) <- checkConstraint ctx preCstr
+      let recordCtx = pushVTeleSeq cstrTele ctx
       record <- checkRecord recordCtx preRecord vTele
-      return $ wfMetaValue (MGuard problem record) (MVDyn vTele)
-    (MExt prePrev lift preProblem preRecord, MVDyn vTele) -> do
+      return $ wfMetaValue (MGuard cstr record) (MVDyn vTele)
+    (MExt prePrev lift preCstr preRecord, MVDyn vTele) -> do
       prev <- infer ctx prePrev
       case tyOf prev of
         MVDyn prevTele -> do
           prevTeleSeq <- doIntoTeleSequence prevTele
           if lift == size prevTeleSeq then do
-            let problemCtx = pushVTeleSeq prevTeleSeq ctx
-            (problem, problemTeleSeq) <- checkProblem problemCtx preProblem
-            let recordCtx = pushVTeleSeq problemTeleSeq problemCtx
+            let cstrCtx = pushVTeleSeq prevTeleSeq ctx
+            (cstr, cstrTeleSeq) <- checkConstraint cstrCtx preCstr
+            let recordCtx = pushVTeleSeq cstrTeleSeq cstrCtx
             record <- checkRecord recordCtx preRecord vTele
-            return $ wfMetaValue (MExt (tmOf prev) lift problem record) (MVDyn vTele)
+            return $ wfMetaValue (MExt (tmOf prev) lift cstr record) (MVDyn vTele)
           else
-            throwError $ UnexpectedLift (MExt prePrev lift preProblem preRecord) (size prevTeleSeq)
+            throwError $ UnexpectedLift (MExt prePrev lift preCstr preRecord) (size prevTeleSeq)
         prevTy -> do
           prevTyTm <- doQuote ctx prevTy
           throwError $ ExpectedDynamicType prePrev prevTyTm
