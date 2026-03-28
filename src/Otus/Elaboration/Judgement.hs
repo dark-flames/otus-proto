@@ -1,12 +1,10 @@
 module Otus.Elaboration.Judgement (
+  Type,
+  MetaType,
   WfMetaTerm (..),
   WfObjTerm (..),
-  HybridTerm (..),
   Judgement (..),
   HybridType (..),
-  wfObjTerm,
-  wfMetaValue,
-  wfMetaComputation,
 ) where
 
 import Otus.Ast
@@ -48,19 +46,6 @@ instance Judgement WfObjTerm where
   tmOf (WfObjTerm tm _) = tm
   tyOf (WfObjTerm _ ty) = ty
 
-data HybridTerm
-  = ObjTerm WfObjTerm
-  | MetaTerm WfMetaTerm
-
 data HybridType
   = MetaTy MetaType
   | ObjTy Type
-
-wfObjTerm :: Term -> Type -> HybridTerm
-wfObjTerm tm ty = ObjTerm $ WfObjTerm tm ty
-
-wfMetaValue :: MetaTerm -> MetaType -> HybridTerm
-wfMetaValue tm ty = MetaTerm $ WfMetaTerm tm mempty ty
-
-wfMetaComputation :: MetaTerm -> EffectSet -> MetaType -> HybridTerm
-wfMetaComputation tm eff ty = MetaTerm $ WfMetaTerm tm eff ty

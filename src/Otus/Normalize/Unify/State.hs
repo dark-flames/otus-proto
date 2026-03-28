@@ -266,7 +266,13 @@ force = \case
   Neutral (NVar lvl) spine -> do
     entry <- findEntry lvl
     case entry of
-      MetaVar (Just (_, solution)) -> liftEval $ evaluateNeutral solution spine
-      ConstraintProof (Just (_, eqRefl)) -> liftEval $ evaluateNeutral eqRefl spine
+      MetaVar (Just (_, solution)) -> do
+        solution' <- force solution
+        r <- liftEval $ evaluateNeutral solution' spine
+        force r
+      ConstraintProof (Just (_, solution)) -> do
+        solution' <- force solution
+        r <- liftEval $ evaluateNeutral solution' spine
+        force r
       _ -> return $ Neutral (NVar lvl) spine
   val -> return val

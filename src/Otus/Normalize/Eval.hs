@@ -29,6 +29,20 @@ class (Show t) => Evaluatable t where
   makeCls :: t -> Environment -> HOAS (EvalRes t)
   makeCls t env = HOAS (\f -> evaluate t (f env))
 
+applySubst :: Subst -> Environment -> EvalResult Environment
+applySubst (Subst dropN exts) env = do
+  let (droped, _) = popEnv dropN env
+  items <- traverse (`evalSubstSeg` droped) exts
+  return $ env ||><| items
+  where
+    evalSubstSeg :: SubstSeg -> Environment -> EvalResult EnvItem
+    evalSubstSeg sbSeg e = case sbSeg of
+      ObjSeg tm -> ObjVal <$> evaluate tm e
+      MetaSeg tm -> MetaVal <$> evaluate tm e
+      AmbiguousIdx idx -> case e @? idx of
+        Nothing -> throwError $ UnboundIndex idx
+        Just item -> return item
+
 -- object
 intoTeleSequence :: VTelescope -> EvalResult VTeleSequence
 intoTeleSequence t = VTeleSeq <$> go t
@@ -154,6 +168,9 @@ instance Evaluatable Term where
     Splicing meta -> do
       vMeta <- evaluate meta env
       evaluateSplicing vMeta
+    Substituted t sb -> do
+      env' <- applySubst sb env
+      evaluate t env'
     Type l -> return $ VType l
 
 -- meta
@@ -186,8 +203,8 @@ evaluateMExt prev lift cstrHOAS recordHOAS = case prev of
     cstr <- evalHOAS cstrHOAS (pushEnvN prevRecord)
     let record pushAllCstr =
           ( do
-              let pushPrevCstr = fst . splitEnv (size cstr) . pushAllCstr
-              let pushCstr e = e ||><| snd (splitEnv (size cstr) (pushAllCstr e))
+              let pushPrevCstr = fst . popEnv (size cstr) . pushAllCstr
+              let pushCstr e = e ||><| snd (popEnv (size cstr) (pushAllCstr e))
               -- get the value of prevMeta and prevCstr, and then evaluate prevRecord
               pushPrevRecord <- pushEnvN <$> evalHOAS prevRecordHOAS pushPrevCstr
               -- push prevRecord and cstr
@@ -266,3 +283,6 @@ instance Evaluatable MetaTerm where
     MSolve t -> do
       val <- evaluate t env
       evaluateSolve (envLevel env) val
+    MSubstituted t sb -> do
+      env' <- applySubst sb env
+      evaluate t env'

@@ -1,156 +1,28 @@
 module Otus.Normalize.Subst (
-  Subst (..),
-  Substitutable (..),
-  dropSb,
-  extSb,
-  extSb',
-  composeSb,
-  liftSb,
-  liftNSb,
+  ReduceExplicitSubst (..),
 ) where
 
-import qualified Data.Sequence as Seq
-
-import Otus.Ast
+import Otus.Ast.Id (unIndex)
+import Otus.Ast.Term
 import Otus.Common
 
-data SubstSeg
-  = ObjSeg Term
-  | MetaSeg MetaTerm
-  | AmbiguousIdx IndexId
+class ReduceExplicitSubst tm where
+  performSb :: tm -> Subst -> Maybe tm
+  reduceSb :: tm -> Maybe tm
 
-data Subst = Subst
-  { baseDrop :: Int,
-    substSeq :: Seq SubstSeg
-  }
+  fPerformSb :: (Traversable f) => f tm -> Subst -> Maybe (f tm)
+  fPerformSb l sb = traverse (`performSb` sb) l
 
-class SyntaxTerm tm where
-  asSubstSeg :: tm -> SubstSeg
-
-class Substitutable tm where
-  subst :: tm -> Subst -> Maybe tm
-
-  fSubst :: (Traversable f) => f tm -> Subst -> Maybe (f tm)
-  fSubst l sb = traverse (`subst` sb) l
-
--- ΓΓ' => Γ
-dropSb :: Int -> Subst
-dropSb n = Subst n mempty
-
--- (Γ => Δ) -> A -> (Γ => Δ, A)
-extSb :: (SyntaxTerm tm) => Subst -> tm -> Subst
-extSb (Subst d s) tm = Subst d (s |> asSubstSeg tm)
-
-extSb' :: (SyntaxTerm tm) => Subst -> Seq tm -> Subst
-extSb' (Subst d s) tmSeq = Subst d (s >< fmap asSubstSeg tmSeq)
-
--- (Δ => ≡) -> (Γ => Δ) -> (Γ => ≡)
-composeSb :: Subst -> Subst -> Maybe Subst
-composeSb (Subst ld ls) r@(Subst rd rs) = do
-  ls' <- fSubst ls r
-  if ld <= size rs then
-    return $ Subst rd (Seq.take (size rs - ld) rs >< ls')
-  else
-    return $ Subst (rd + size rs - ld) ls'
-
--- (δ: Γ => Δ) -> (Γ, A[δ] => Δ, A)
-liftSb :: Subst -> Maybe Subst
-liftSb = liftNSb 1
-
-liftNSb :: Int -> Subst -> Maybe Subst
-liftNSb n sb = do
-  dSb <- composeSb sb (dropSb n)
-  return $ extSb' dSb (fromList $ map IndexId (reverse [0 .. n]))
-
-instance SyntaxTerm Term where
-  asSubstSeg = ObjSeg
-
-instance SyntaxTerm MetaTerm where
-  asSubstSeg = MetaSeg
-
-instance SyntaxTerm IndexId where
-  asSubstSeg = AmbiguousIdx
-
-instance Substitutable SubstSeg where
-  subst :: SubstSeg -> Subst -> Maybe SubstSeg
-  subst seg sb@(Subst d l) = case seg of
-    ObjSeg t -> ObjSeg <$> subst t sb
-    MetaSeg t -> MetaSeg <$> subst t sb
-    AmbiguousIdx idx ->
-      if unIndex idx < size l then
-        l @? idx
-      else
-        return $ AmbiguousIdx $ shift (d - size l) idx
-
-instance Substitutable MetaTerm where
-  subst :: MetaTerm -> Subst -> Maybe MetaTerm
-  subst tm sb@(Subst d l) = case tm of
-    MVar idx ->
-      if unIndex idx < size l then case l @? idx of
-        Just (MetaSeg t) -> return t
-        Just (AmbiguousIdx idx') -> return $ MVar idx'
-        _ -> Nothing
-      else
-        return $ MVar $ shift (d - size l) idx
-    MTyAnnotation t ty -> do
-      t' <- go t
-      ty' <- go ty
-      return $ MTyAnnotation t' ty'
-    MU eff cTy -> MU eff <$> go cTy
-    MThunk c -> MThunk <$> go c
-    MVType i -> return $ MVType i
-    MLift tele -> MLift <$> subst tele sb
-    MQuote record -> MQuote <$> subst record sb
-    MDyn tele -> MDyn <$> subst tele sb
-    MGuard cstr record -> do
-      cstr' <- subst cstr sb
-      sb' <- liftNSb (size cstr) sb
-      record' <- subst record sb'
-      return $ MGuard cstr' record'
-    MExt prev n cstr record -> do
-      prev' <- go prev
-      sb' <- liftNSb n sb
-      cstr' <- subst cstr sb'
-      sb'' <- liftNSb (size cstr') sb'
-      record' <- subst record sb''
-      return $ MExt prev' n cstr' record'
-    MPi dom eff cod -> do
-      dom' <- go dom
-      cod' <- goLift cod
-      return $ MPi dom' eff cod'
-    MLam oTy body -> do
-      oTy' <- traverse go oTy
-      body' <- goLift body
-      return $ MLam oTy' body'
-    MApp f p -> MApp <$> go f <*> go p
-    MF ty -> MF <$> go ty
-    MReturn t -> MReturn <$> go t
-    MTrigger e -> return $ MTrigger e
-    MLetIn prev body bindTy -> do
-      prev' <- go prev
-      body' <- goLift body
-      bindTy' <- goLift bindTy
-      return $ MLetIn prev' body' bindTy'
-    MForce t -> MForce <$> go t
-    MCType i -> return $ MCType i
-    MSolve t -> MSolve <$> go t
-    where
-      go :: (Substitutable t) => t -> Maybe t
-      go t = subst t sb
-
-      goLift :: (Substitutable t) => t -> Maybe t
-      goLift t = liftSb sb >>= subst t
-
-instance Substitutable Term where
-  subst :: Term -> Subst -> Maybe Term
-  subst tm sb@(Subst d l) = case tm of
+instance ReduceExplicitSubst Term where
+  performSb tm (Subst 0 Empty) = return tm
+  performSb tm sb@(Subst d l) = case tm of
     Var idx ->
       if unIndex idx < size l then case l @? idx of
         Just (ObjSeg t) -> return t
         Just (AmbiguousIdx idx') -> return $ Var idx'
         _ -> Nothing
       else
-        return $ Var $ shift (d - size l) idx -- idx - size l + d
+        return $ Var $ shift (d - size l) idx
     TyAnnotation t ty -> do
       t' <- go t
       ty' <- goLift ty
@@ -182,50 +54,168 @@ instance Substitutable Term where
       proof' <- go proof
       path' <- go path
       return $ J prop' proof' path'
-    _ -> undefined
+    Splicing mt -> Splicing <$> go mt
+    Type i -> return $ Type i
+    Substituted t innerSb -> do
+      composed <- composeSb sb innerSb
+      performSb t composed
     where
-      go :: (Substitutable t) => t -> Maybe t
-      go t = subst t sb
+      go :: (ReduceExplicitSubst t) => t -> Maybe t
+      go t = performSb t sb
 
-      goLift :: (Substitutable t) => t -> Maybe t
-      goLift t = liftSb sb >>= subst t
+      goLift :: (ReduceExplicitSubst t) => t -> Maybe t
+      goLift t = liftSb sb >>= performSb t
 
-      goLiftN :: (Substitutable t) => Int -> t -> Maybe t
-      goLiftN n t = liftNSb n sb >>= subst t
+      goLiftN :: (ReduceExplicitSubst t) => Int -> t -> Maybe t
+      goLiftN n t = liftNSb n sb >>= performSb t
 
-instance Substitutable Telescope where
-  subst :: Telescope -> Subst -> Maybe Telescope
-  subst (TeleSeq raw) sb = TeleSeq <$> go sb raw
+  reduceSb tm = case tm of
+    Substituted t sb -> performSb t sb >>= reduceSb
+    Var idx -> return $ Var idx
+    TyAnnotation t ty -> TyAnnotation <$> reduceSb t <*> reduceSb ty
+    Pi dom cod -> Pi <$> reduceSb dom <*> reduceSb cod
+    Lam ty body -> Lam <$> traverse reduceSb ty <*> reduceSb body
+    App f p -> App <$> reduceSb f <*> reduceSb p
+    Record tele -> Record <$> reduceSb tele
+    List record -> List <$> reduceSb record
+    First t -> First <$> reduceSb t
+    Rest t -> Rest <$> reduceSb t
+    Id ty lhs rhs -> Id <$> reduceSb ty <*> reduceSb lhs <*> reduceSb rhs
+    Refl -> return Refl
+    J prop proof path -> J <$> reduceSb prop <*> reduceSb proof <*> reduceSb path
+    Splicing mt -> Splicing <$> reduceSb mt
+    Type i -> return $ Type i
+
+instance ReduceExplicitSubst Telescope where
+  performSb t (Subst 0 Empty) = return t
+  performSb (TeleSeq raw) sb = TeleSeq <$> go sb raw
     where
       go sb' = \case
         Empty -> return Empty
         ty :<| rst -> do
-          ty' <- subst ty sb'
+          ty' <- performSb ty sb'
           sb'' <- liftSb sb'
           rst' <- go sb'' rst
           return $ ty' :<| rst'
+  reduceSb (TeleSeq raw) = TeleSeq <$> traverse reduceSb raw
 
-instance Substitutable Constraint where
-  subst :: Constraint -> Subst -> Maybe Constraint
-  subst c sb = fst <$> go c
+instance ReduceExplicitSubst Record where
+  performSb r (Subst 0 Empty) = return r
+  performSb (RecordSeq raw) sb = RecordSeq <$> fPerformSb raw sb
+  reduceSb (RecordSeq raw) = RecordSeq <$> traverse reduceSb raw
+
+instance ReduceExplicitSubst Sequence where
+  performSb s (Subst 0 Empty) = return s
+  performSb (Sequence raw) sb = Sequence <$> fPerformSb raw sb
+  reduceSb (Sequence raw) = Sequence <$> traverse reduceSb raw
+
+instance ReduceExplicitSubst Constraint where
+  performSb c (Subst 0 Empty) = return c
+  performSb c sb = fst <$> go c
     where
       go = \case
         CstrEmpty -> return (CstrEmpty, sb)
         CstrDef prev ty -> do
           (prev', sb') <- go prev
-          ty' <- subst ty sb'
+          ty' <- performSb ty sb'
           sb'' <- liftSb sb'
           return (CstrDef prev' ty', sb'')
         CstrTmEq prev tele lhs rhs ty -> do
           (prev', sb') <- go prev
-          tele' <- subst tele sb'
+          tele' <- performSb tele sb'
           localSb <- liftNSb (size tele') sb
-          lhs' <- subst lhs localSb
-          rhs' <- subst rhs localSb
-          ty' <- subst ty localSb
+          lhs' <- performSb lhs localSb
+          rhs' <- performSb rhs localSb
+          ty' <- performSb ty localSb
           sb'' <- liftSb sb'
           return (CstrTmEq prev' tele' lhs' rhs' ty', sb'')
+  reduceSb = \case
+    CstrEmpty -> return CstrEmpty
+    CstrDef prev ty -> CstrDef <$> reduceSb prev <*> reduceSb ty
+    CstrTmEq prev tele lhs rhs ty ->
+      CstrTmEq <$> reduceSb prev <*> reduceSb tele <*> reduceSb lhs <*> reduceSb rhs <*> reduceSb ty
 
-instance Substitutable Record where
-  subst :: Record -> Subst -> Maybe Record
-  subst (RecordSeq raw) sb = RecordSeq <$> fSubst raw sb
+instance ReduceExplicitSubst MetaTerm where
+  performSb tm (Subst 0 Empty) = return tm
+  performSb tm sb@(Subst d l) = case tm of
+    MVar idx ->
+      if unIndex idx < size l then case l @? idx of
+        Just (MetaSeg t) -> return t
+        Just (AmbiguousIdx idx') -> return $ MVar idx'
+        _ -> Nothing
+      else
+        return $ MVar $ shift (d - size l) idx
+    MTyAnnotation t ty -> do
+      t' <- go t
+      ty' <- go ty
+      return $ MTyAnnotation t' ty'
+    MU eff cTy -> MU eff <$> go cTy
+    MThunk c -> MThunk <$> go c
+    MVType i -> return $ MVType i
+    MLift tele -> MLift <$> performSb tele sb
+    MQuote record -> MQuote <$> performSb record sb
+    MDyn tele -> MDyn <$> performSb tele sb
+    MGuard cstr record -> do
+      cstr' <- performSb cstr sb
+      sb' <- liftNSb (size cstr) sb
+      record' <- performSb record sb'
+      return $ MGuard cstr' record'
+    MExt prev n cstr record -> do
+      prev' <- go prev
+      sb' <- liftNSb n sb
+      cstr' <- performSb cstr sb'
+      sb'' <- liftNSb (size cstr') sb'
+      record' <- performSb record sb''
+      return $ MExt prev' n cstr' record'
+    MPi dom eff cod -> do
+      dom' <- go dom
+      cod' <- goLift cod
+      return $ MPi dom' eff cod'
+    MLam oTy body -> do
+      oTy' <- traverse go oTy
+      body' <- goLift body
+      return $ MLam oTy' body'
+    MApp f p -> MApp <$> go f <*> go p
+    MF ty -> MF <$> go ty
+    MReturn t -> MReturn <$> go t
+    MTrigger e -> return $ MTrigger e
+    MLetIn prev body bindTy -> do
+      prev' <- go prev
+      body' <- goLift body
+      bindTy' <- goLift bindTy
+      return $ MLetIn prev' body' bindTy'
+    MForce t -> MForce <$> go t
+    MCType i -> return $ MCType i
+    MSolve t -> MSolve <$> go t
+    MSubstituted t innerSb -> do
+      composed <- composeSb sb innerSb
+      performSb t composed
+    where
+      go :: (ReduceExplicitSubst t) => t -> Maybe t
+      go t = performSb t sb
+
+      goLift :: (ReduceExplicitSubst t) => t -> Maybe t
+      goLift t = liftSb sb >>= performSb t
+
+  reduceSb tm = case tm of
+    MSubstituted t sb -> performSb t sb >>= reduceSb
+    MVar idx -> return $ MVar idx
+    MTyAnnotation t ty -> MTyAnnotation <$> reduceSb t <*> reduceSb ty
+    MU eff cTy -> MU eff <$> reduceSb cTy
+    MThunk c -> MThunk <$> reduceSb c
+    MVType i -> return $ MVType i
+    MLift tele -> MLift <$> reduceSb tele
+    MQuote record -> MQuote <$> reduceSb record
+    MDyn tele -> MDyn <$> reduceSb tele
+    MGuard cstr record -> MGuard <$> reduceSb cstr <*> reduceSb record
+    MExt prev n cstr record -> MExt <$> reduceSb prev <*> pure n <*> reduceSb cstr <*> reduceSb record
+    MPi dom eff cod -> MPi <$> reduceSb dom <*> pure eff <*> reduceSb cod
+    MLam oTy body -> MLam <$> traverse reduceSb oTy <*> reduceSb body
+    MApp f p -> MApp <$> reduceSb f <*> reduceSb p
+    MF ty -> MF <$> reduceSb ty
+    MReturn t -> MReturn <$> reduceSb t
+    MTrigger e -> return $ MTrigger e
+    MLetIn prev body bindTy -> MLetIn <$> reduceSb prev <*> reduceSb body <*> reduceSb bindTy
+    MForce t -> MForce <$> reduceSb t
+    MCType i -> return $ MCType i
+    MSolve t -> MSolve <$> reduceSb t
