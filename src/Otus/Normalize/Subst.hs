@@ -57,17 +57,16 @@ instance ReduceExplicitSubst Term where
     Splicing mt -> Splicing <$> go mt
     Type i -> return $ Type i
     Substituted t innerSb -> do
-      composed <- composeSb sb innerSb
-      performSb t composed
+      performSb t (composeSb sb innerSb)
     where
       go :: (ReduceExplicitSubst t) => t -> Maybe t
       go t = performSb t sb
 
       goLift :: (ReduceExplicitSubst t) => t -> Maybe t
-      goLift t = liftSb sb >>= performSb t
+      goLift t = performSb t (liftSb sb)
 
       goLiftN :: (ReduceExplicitSubst t) => Int -> t -> Maybe t
-      goLiftN n t = liftNSb n sb >>= performSb t
+      goLiftN n t = performSb t (liftNSb n sb)
 
   reduceSb tm = case tm of
     Substituted t sb -> performSb t sb >>= reduceSb
@@ -94,8 +93,7 @@ instance ReduceExplicitSubst Telescope where
         Empty -> return Empty
         ty :<| rst -> do
           ty' <- performSb ty sb'
-          sb'' <- liftSb sb'
-          rst' <- go sb'' rst
+          rst' <- go (liftSb sb') rst
           return $ ty' :<| rst'
   reduceSb (TeleSeq raw) = TeleSeq <$> traverse reduceSb raw
 
@@ -118,17 +116,15 @@ instance ReduceExplicitSubst Constraint where
         CstrDef prev ty -> do
           (prev', sb') <- go prev
           ty' <- performSb ty sb'
-          sb'' <- liftSb sb'
-          return (CstrDef prev' ty', sb'')
+          return (CstrDef prev' ty', liftSb sb')
         CstrTmEq prev tele lhs rhs ty -> do
           (prev', sb') <- go prev
           tele' <- performSb tele sb'
-          localSb <- liftNSb (size tele') sb
+          let localSb = liftNSb (size tele') sb
           lhs' <- performSb lhs localSb
           rhs' <- performSb rhs localSb
           ty' <- performSb ty localSb
-          sb'' <- liftSb sb'
-          return (CstrTmEq prev' tele' lhs' rhs' ty', sb'')
+          return (CstrTmEq prev' tele' lhs' rhs' ty', liftSb sb')
   reduceSb = \case
     CstrEmpty -> return CstrEmpty
     CstrDef prev ty -> CstrDef <$> reduceSb prev <*> reduceSb ty
@@ -157,14 +153,14 @@ instance ReduceExplicitSubst MetaTerm where
     MDyn tele -> MDyn <$> performSb tele sb
     MGuard cstr record -> do
       cstr' <- performSb cstr sb
-      sb' <- liftNSb (size cstr) sb
+      let sb' = liftNSb (size cstr) sb
       record' <- performSb record sb'
       return $ MGuard cstr' record'
     MExt prev n cstr record -> do
       prev' <- go prev
-      sb' <- liftNSb n sb
+      let sb' = liftNSb n sb
       cstr' <- performSb cstr sb'
-      sb'' <- liftNSb (size cstr') sb'
+      let sb'' = liftNSb (size cstr') sb'
       record' <- performSb record sb''
       return $ MExt prev' n cstr' record'
     MPi dom eff cod -> do
@@ -187,15 +183,13 @@ instance ReduceExplicitSubst MetaTerm where
     MForce t -> MForce <$> go t
     MCType i -> return $ MCType i
     MSolve t -> MSolve <$> go t
-    MSubstituted t innerSb -> do
-      composed <- composeSb sb innerSb
-      performSb t composed
+    MSubstituted t innerSb -> performSb t (composeSb sb innerSb)
     where
       go :: (ReduceExplicitSubst t) => t -> Maybe t
       go t = performSb t sb
 
       goLift :: (ReduceExplicitSubst t) => t -> Maybe t
-      goLift t = liftSb sb >>= performSb t
+      goLift t = performSb t (liftSb sb)
 
   reduceSb tm = case tm of
     MSubstituted t sb -> performSb t sb >>= reduceSb

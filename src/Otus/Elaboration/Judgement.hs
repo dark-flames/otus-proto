@@ -25,6 +25,14 @@ data WfObjTerm = WfObjTerm
     jTy :: Type
   }
 
+instance Substitutable WfObjTerm where
+  subst :: WfObjTerm -> Subst -> WfObjTerm
+  subst (WfObjTerm tm ty) sb = WfObjTerm (subst tm sb) ty
+
+instance Substitutable WfMetaTerm where
+  subst :: WfMetaTerm -> Subst -> WfMetaTerm
+  subst (WfMetaTerm tm eff ty) sb = WfMetaTerm (subst tm sb) eff ty
+
 class Judgement j where
   type Tm j
   type TmTy j

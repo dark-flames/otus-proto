@@ -45,25 +45,20 @@ class SyntaxTerm tm where
   asSubstSeg :: tm -> SubstSeg
 
 class Substitutable tm where
-  subst :: tm -> Subst -> Maybe tm
-
-  fSubst :: (Traversable f) => f tm -> Subst -> Maybe (f tm)
-  fSubst l sb = traverse (`subst` sb) l
+  subst :: tm -> Subst -> tm
 
 instance SyntaxTerm IndexId where
   asSubstSeg = AmbiguousIdx
 
 instance Substitutable SubstSeg where
-  subst :: SubstSeg -> Subst -> Maybe SubstSeg
-  subst seg (Subst 0 Empty) = return seg
+  subst :: SubstSeg -> Subst -> SubstSeg
+  subst seg (Subst 0 Empty) = seg
   subst seg sb@(Subst d l) = case seg of
-    ObjSeg t -> ObjSeg <$> subst t sb
-    MetaSeg t -> MetaSeg <$> subst t sb
-    AmbiguousIdx idx ->
-      if unIndex idx < size l then
-        l @? idx
-      else
-        return $ AmbiguousIdx $ shift (d - size l) idx
+    ObjSeg t -> ObjSeg $ subst t sb
+    MetaSeg t -> MetaSeg $ subst t sb
+    AmbiguousIdx idx -> case l @? idx of
+      Just s -> s
+      Nothing -> AmbiguousIdx $ shift (d - size l) idx
 
 -- ΓΓ' => Γ
 idSb :: Subst
@@ -80,22 +75,22 @@ extSb' :: (SyntaxTerm tm) => Subst -> Seq tm -> Subst
 extSb' (Subst d s) tmSeq = Subst d (s >< fmap asSubstSeg tmSeq)
 
 -- (Δ => ≡) -> (Γ => Δ) -> (Γ => ≡)
-composeSb :: Subst -> Subst -> Maybe Subst
-composeSb (Subst ld ls) r@(Subst rd rs) = do
-  ls' <- fSubst ls r
-  if ld <= size rs then
-    return $ Subst rd (Seq.take (size rs - ld) rs >< ls')
-  else
-    return $ Subst (rd + size rs - ld) ls'
+composeSb :: Subst -> Subst -> Subst
+composeSb (Subst ld ls) r@(Subst rd rs) =
+  let ls' = fmap (`subst` r) ls
+  in if ld <= size rs then
+       Subst rd (Seq.take (size rs - ld) rs >< ls')
+     else
+       Subst (rd + size rs - ld) ls'
 
 -- (δ: Γ => Δ) -> (Γ, A[δ] => Δ, A)
-liftSb :: Subst -> Maybe Subst
+liftSb :: Subst -> Subst
 liftSb = liftNSb 1
 
-liftNSb :: Int -> Subst -> Maybe Subst
-liftNSb n sb = do
-  dSb <- composeSb sb (dropSb n)
-  return $ extSb' dSb (fromList $ map IndexId (reverse [0 .. n]))
+liftNSb :: Int -> Subst -> Subst
+liftNSb n sb =
+  let dSb = composeSb sb (dropSb n)
+  in extSb' dSb (fromList $ map IndexId (reverse [0 .. n]))
 
 -- Telescope
 newtype Telescope = TeleSeq
@@ -110,17 +105,19 @@ instance Pretty Telescope where
   pretty = pretty . unTele
 
 instance Substitutable Telescope where
-  subst :: Telescope -> Subst -> Maybe Telescope
-  subst t (Subst 0 Empty) = return t
-  subst (TeleSeq raw) sb = TeleSeq <$> go sb raw
+  subst :: Telescope -> Subst -> Telescope
+  subst t (Subst 0 Empty) = t
+  subst (TeleSeq raw) sb = TeleSeq $ go sb raw
     where
       go sb' = \case
-        Empty -> return Empty
-        ty :<| rst -> do
-          ty' <- subst ty sb'
-          sb'' <- liftSb sb'
-          rst' <- go sb'' rst
-          return $ ty' :<| rst'
+        Empty -> Empty
+        ty :<| rst ->
+          let
+            ty' = subst ty sb'
+            sb'' = liftSb sb'
+            rst' = go sb'' rst
+          in
+            ty' :<| rst'
 
 -- Record
 newtype Record = RecordSeq
@@ -135,9 +132,9 @@ instance Pretty Record where
   pretty = pretty . unRecord
 
 instance Substitutable Record where
-  subst :: Record -> Subst -> Maybe Record
-  subst r (Subst 0 Empty) = return r
-  subst (RecordSeq raw) sb = RecordSeq <$> fSubst raw sb
+  subst :: Record -> Subst -> Record
+  subst r (Subst 0 Empty) = r
+  subst (RecordSeq raw) sb = RecordSeq $ fmap (`subst` sb) raw
 
 -- Sequence
 newtype Sequence = Sequence
@@ -161,26 +158,30 @@ instance Sized Constraint where
   size (CstrTmEq prev _ _ _ _) = size prev + 1
 
 instance Substitutable Constraint where
-  subst :: Constraint -> Subst -> Maybe Constraint
-  subst c (Subst 0 Empty) = return c
-  subst c sb = fst <$> go c
+  subst :: Constraint -> Subst -> Constraint
+  subst c (Subst 0 Empty) = c
+  subst c sb = fst $ go c
     where
       go = \case
-        CstrEmpty -> return (CstrEmpty, sb)
-        CstrDef prev ty -> do
-          (prev', sb') <- go prev
-          ty' <- subst ty sb'
-          sb'' <- liftSb sb'
-          return (CstrDef prev' ty', sb'')
-        CstrTmEq prev tele lhs rhs ty -> do
-          (prev', sb') <- go prev
-          tele' <- subst tele sb'
-          localSb <- liftNSb (size tele') sb
-          lhs' <- subst lhs localSb
-          rhs' <- subst rhs localSb
-          ty' <- subst ty localSb
-          sb'' <- liftSb sb'
-          return (CstrTmEq prev' tele' lhs' rhs' ty', sb'')
+        CstrEmpty -> (CstrEmpty, sb)
+        CstrDef prev ty ->
+          let
+            (prev', sb') = go prev
+            ty' = subst ty sb'
+            sb'' = liftSb sb'
+          in
+            (CstrDef prev' ty', sb'')
+        CstrTmEq prev tele lhs rhs ty ->
+          let
+            (prev', sb') = go prev
+            tele' = subst tele sb'
+            localSb = liftNSb (size tele') sb
+            lhs' = subst lhs localSb
+            rhs' = subst rhs localSb
+            ty' = subst ty localSb
+            sb'' = liftSb sb'
+          in
+            (CstrTmEq prev' tele' lhs' rhs' ty', sb'')
 
 -- Term
 type OptionalTy = Maybe Term
@@ -233,9 +234,9 @@ instance SyntaxTerm Term where
   asSubstSeg = ObjSeg
 
 instance Substitutable Term where
-  subst :: Term -> Subst -> Maybe Term
-  subst tm (Subst 0 Empty) = return tm
-  subst tm sb = return $ Substituted tm sb
+  subst :: Term -> Subst -> Term
+  subst tm (Subst 0 Empty) = tm
+  subst tm sb = Substituted tm sb
 
 -- Meta Term
 type OptionalMetaTy = Maybe MetaTerm
@@ -294,9 +295,9 @@ instance SyntaxTerm MetaTerm where
   asSubstSeg = MetaSeg
 
 instance Substitutable MetaTerm where
-  subst :: MetaTerm -> Subst -> Maybe MetaTerm
-  subst tm (Subst 0 Empty) = return tm
-  subst tm sb = return $ MSubstituted tm sb
+  subst :: MetaTerm -> Subst -> MetaTerm
+  subst tm (Subst 0 Empty) = tm
+  subst tm sb = MSubstituted tm sb
 
 piTele :: Telescope -> Term -> Term
 piTele tele cod = go $ unTele tele
